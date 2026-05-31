@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>ŠkoPilot Games — Arcade</title>
+<title>ŠkoPilot Family — Arcade</title>
 <style>
   @font-face{
     font-family:'PixelArcade';
@@ -11,13 +11,19 @@
     font-display:swap;
   }
   :root{
-    --g1:#2fc56f; --g2:#62e29a; --g3:#0d4631;
-    --mint:#b8f5da; --white:#eef6f4; --gold:#f5c518; --bg:#02080c;
+    --bg:#092725;          /* pozadí z loga */
+    --panel:#0c302c;
+    --line:#1d4a44;
+    --sage:#7e9a90;        /* SF monogram / Pilot */
+    --sage2:#a9c4ba;       /* světlá šalvějová */
+    --teal:#34625b;
+    --white:#ffffff;
+    --gold:#f5c518;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{height:100%;}
   body{
-    background:#02080c; color:var(--white);
+    background:var(--bg); color:var(--white);
     font-family:'PixelArcade','Courier New',monospace;
     overflow:hidden; height:100vh; user-select:none; cursor:default;
   }
@@ -25,229 +31,252 @@
   #screen{
     position:fixed;inset:0;z-index:2;
     display:flex;flex-direction:column;align-items:center;
-    padding:clamp(8px,2.2vh,28px) 12px;text-align:center;
+    padding:clamp(8px,2vh,24px) 12px;text-align:center;
+    overflow-y:auto;
   }
   #screen::after{
     content:"";position:fixed;inset:0;pointer-events:none;z-index:40;
-    background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.18) 3px,rgba(0,0,0,0) 4px);
+    background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);
   }
   body::before{
     content:"";position:fixed;inset:0;pointer-events:none;z-index:41;
-    box-shadow:inset 0 0 160px 50px rgba(0,0,0,.9);
-    background:radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,.3) 100%);
+    box-shadow:inset 0 0 160px 50px rgba(0,0,0,.55);
+    background:radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,.25) 100%);
   }
 
-  /* HLAVIČKA */
-  .head{display:flex;align-items:center;gap:clamp(10px,2vw,26px);}
-  .avatar{
-    height:clamp(54px,10vh,108px);width:auto;
-    filter:drop-shadow(0 0 14px rgba(47,197,111,.55));
-    animation:bob 2.4s steps(2,end) infinite;
+  .logo{
+    height:clamp(54px,11vh,120px);width:auto;
+    filter:drop-shadow(0 0 18px rgba(126,154,144,.35));
+    animation:bob 3s steps(2,end) infinite;
   }
-  @keyframes bob{50%{transform:translateY(-6px);}}
-  .titles{text-align:left;}
-  .title{
-    font-size:clamp(15px,3.4vw,34px);line-height:1.25;color:var(--g2);
-    text-shadow:3px 3px 0 var(--g3),0 0 12px rgba(47,197,111,.55);letter-spacing:2px;
-  }
-  .title b{color:var(--white);}
-  .subtitle{margin-top:6px;font-size:clamp(7px,1.3vw,11px);color:var(--gold);letter-spacing:2px;}
+  @keyframes bob{50%{transform:translateY(-5px);}}
 
-  /* MŘÍŽKA HER */
-  main{flex:1;display:flex;align-items:center;justify-content:center;width:100%;}
-  .grid{display:flex;flex-wrap:wrap;justify-content:center;
-        gap:clamp(12px,2.2vw,30px);padding:0 10px;}
+  /* KATEGORIE */
+  .cat{width:min(1100px,96vw);margin-top:clamp(10px,2.4vh,26px);}
+  .cat-head{
+    display:flex;align-items:center;gap:10px;
+    font-size:clamp(9px,1.7vw,16px);color:var(--sage2);
+    letter-spacing:3px;margin-bottom:clamp(8px,1.4vh,14px);
+    text-shadow:0 0 10px rgba(169,196,186,.35);
+  }
+  .cat-head::before{content:"";width:14px;height:14px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--sage2),var(--teal));
+    clip-path:polygon(0 0,100% 0,70% 100%,0 100%);} /* malý "SF" klín */
+  .cat-head::after{content:"";flex:1;height:2px;background:linear-gradient(90deg,var(--line),transparent);}
+
+  .row{display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(10px,1.8vw,24px);}
+  .two{display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(14px,3vw,46px);}
+
   .card{
-    width:clamp(150px,19vw,230px);
+    width:clamp(122px,15vw,184px);
     display:flex;flex-direction:column;align-items:center;
     cursor:pointer;transition:transform .12s;
   }
   .frame{
     width:100%;aspect-ratio:4/3;position:relative;
     border-radius:10px;overflow:hidden;
-    border:3px solid #16382a;
-    box-shadow:inset 0 0 0 2px #02080c, 0 6px 14px rgba(0,0,0,.5);
-    background:#07140d;
+    border:3px solid var(--line);
+    box-shadow:inset 0 0 0 2px var(--bg),0 6px 14px rgba(0,0,0,.45);
+    background:#06201d;
   }
   .frame svg{display:block;width:100%;height:100%;}
-  .frame::after{ /* scanlines na náhledu */
-    content:"";position:absolute;inset:0;pointer-events:none;
-    background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);
-  }
-  .cap{margin-top:10px;font-size:clamp(8px,1.2vw,13px);color:#6f9d85;letter-spacing:1px;line-height:1.5;}
-  .genre{margin-top:6px;font-size:clamp(6px,1vw,9px);color:#3f6b55;letter-spacing:1px;}
-  .hi{margin-top:5px;font-size:clamp(6px,1vw,9px);color:#2c5a40;letter-spacing:1px;}
+  .frame::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);}
+  .cap{margin-top:9px;font-size:clamp(7px,1.05vw,11px);color:var(--sage);letter-spacing:1px;line-height:1.5;}
+  .genre{margin-top:5px;font-size:clamp(6px,.85vw,8px);color:var(--teal);letter-spacing:1px;}
+  .hi{margin-top:4px;font-size:clamp(6px,.85vw,8px);color:#3c5a52;letter-spacing:1px;}
 
   .card.sel{transform:translateY(-6px) scale(1.05);}
-  .card.sel .frame{
-    border-color:var(--g1);
-    box-shadow:inset 0 0 0 2px #02080c,0 0 22px rgba(47,197,111,.65),0 6px 14px rgba(0,0,0,.5);
-  }
-  .card.sel .cap{color:var(--g2);text-shadow:0 0 8px rgba(47,197,111,.6);}
+  .card.sel .frame{border-color:var(--sage2);
+    box-shadow:inset 0 0 0 2px var(--bg),0 0 22px rgba(169,196,186,.6),0 6px 14px rgba(0,0,0,.45);}
+  .card.sel .cap{color:var(--sage2);text-shadow:0 0 8px rgba(169,196,186,.6);}
   .card.sel .hi{color:var(--gold);}
   .card.sel .frame::before{
-    content:"\25B6 HRAJ";position:absolute;z-index:3;left:50%;bottom:8px;transform:translateX(-50%);
-    background:var(--g1);color:#02080c;font-size:clamp(7px,1vw,10px);
-    padding:4px 9px;border-radius:4px;letter-spacing:1px;
-    animation:blink .5s steps(1) infinite;
-  }
+    content:"\25B6 PLAY";position:absolute;z-index:3;left:50%;bottom:8px;transform:translateX(-50%);
+    background:var(--sage2);color:var(--bg);font-size:clamp(7px,1vw,10px);
+    padding:4px 9px;border-radius:4px;letter-spacing:1px;animation:blink .5s steps(1) infinite;}
   @keyframes blink{50%{opacity:0;}}
 
-  .foot{display:flex;flex-direction:column;gap:clamp(5px,1.2vh,12px);align-items:center;}
-  .coin{font-size:clamp(9px,1.7vw,16px);color:#fff;letter-spacing:2px;animation:blink 1.1s steps(1) infinite;}
-  .hint{font-size:clamp(6px,1.1vw,10px);color:#2c5a40;letter-spacing:1px;line-height:1.8;}
-  .credit{font-size:clamp(6px,1.1vw,10px);color:#244;letter-spacing:1px;}
+  /* SOON dlaždice */
+  .card.soon{cursor:not-allowed;}
+  .card.soon .frame{filter:saturate(.5) brightness(.8);}
+  .card.soon .frame::before{
+    content:"SOON";position:absolute;z-index:3;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:clamp(14px,2.6vw,30px);color:var(--white);letter-spacing:4px;
+    text-shadow:0 0 12px rgba(0,0,0,.9),2px 2px 0 var(--teal);
+    background:rgba(6,32,29,.35);}
+  .ribbon{
+    position:absolute;z-index:4;top:9px;right:-28px;transform:rotate(45deg);
+    background:var(--gold);color:var(--bg);font-size:clamp(6px,.9vw,9px);
+    letter-spacing:2px;padding:3px 32px;box-shadow:0 2px 6px rgba(0,0,0,.4);}
+
+  .foot{margin-top:auto;padding-top:clamp(8px,2vh,18px);
+    display:flex;flex-direction:column;gap:clamp(5px,1.1vh,11px);align-items:center;}
+  .coin{font-size:clamp(9px,1.6vw,15px);color:var(--white);letter-spacing:2px;animation:blink 1.1s steps(1) infinite;}
+  .hint{font-size:clamp(6px,1vw,9px);color:var(--teal);letter-spacing:1px;line-height:1.8;}
+  .credit{font-size:clamp(6px,1vw,9px);color:#244a44;letter-spacing:1px;}
 </style>
 </head>
 <body>
   <canvas id="stars"></canvas>
   <div id="screen">
-    <div class="head">
-      <img class="avatar" src="assets/skopilot.png"
-           onerror="this.onerror=null;this.src='invaders/skopilotHead.png'" alt="ŠkoPilot">
-      <div class="titles">
-        <div class="title">ŠKO<b>PILOT</b><br>GAMES</div>
-        <div class="subtitle">ŠKOPILOT EDITION</div>
+    <img class="logo" src="assets/logo.png" alt="ŠkoPilot Family">
+
+    <!-- KATEGORIE: ŠKOPILOT -->
+    <div class="cat">
+      <div class="cat-head">ŠKOPILOT</div>
+      <div class="row" id="row-games"></div>
+    </div>
+
+    <!-- KATEGORIE: CLIP + PRO -->
+    <div class="cat">
+      <div class="two">
+        <div style="flex:1;min-width:200px;max-width:520px;">
+          <div class="cat-head">ŠKOPILOT CLIP</div>
+          <div class="row" id="row-clip"></div>
+        </div>
+        <div style="flex:1;min-width:200px;max-width:520px;">
+          <div class="cat-head">ŠKOPILOT PRO</div>
+          <div class="row" id="row-pro"></div>
+        </div>
       </div>
     </div>
 
-    <main><div class="grid" id="grid"></div></main>
-
     <div class="foot">
       <div class="coin">PUSH START</div>
-      <div class="hint">JOYSTICK / &larr;&rarr; VYBER &nbsp;&middot;&nbsp; START / ENTER HRAJ &nbsp;&middot;&nbsp; ESC = MENU</div>
-      <div class="credit">&copy; 2026 ŠKODA &middot; SKOPILOT ARCADE</div>
+      <div class="hint">JOYSTICK / &larr;&rarr; SELECT &nbsp;&middot;&nbsp; START / ENTER PLAY &nbsp;&middot;&nbsp; ESC = MENU</div>
+      <div class="credit">&copy; 2026 ŠKODA &middot; ŠKOPILOT FAMILY</div>
     </div>
   </div>
 
 <script>
   const HEAD = 'invaders/skopilotHead.png';
 
-  // Náhledové obrázky her (inline SVG, barvy maskota)
   const ART = {
     flappy:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#07140d"/>
+      <rect width="160" height="120" fill="#06201d"/>
       <rect y="108" width="160" height="12" fill="#0d2c1d"/>
-      <g fill="#2fc56f">
-        <rect x="98" y="0" width="28" height="40"/><rect x="98" y="80" width="28" height="28"/>
-      </g>
-      <g fill="#0d4631">
-        <rect x="94" y="36" width="36" height="9"/><rect x="94" y="80" width="36" height="9"/>
-      </g>
+      <g fill="#2fc56f"><rect x="98" y="0" width="28" height="40"/><rect x="98" y="80" width="28" height="28"/></g>
+      <g fill="#0d4631"><rect x="94" y="36" width="36" height="9"/><rect x="94" y="80" width="36" height="9"/></g>
       <circle cx="140" cy="62" r="9" fill="#f5c518"/>
       <text x="140" y="66" font-family="sans-serif" font-size="11" font-weight="bold" fill="#c8960a" text-anchor="middle">$</text>
-      <image href="${HEAD}" x="40" y="46" width="34" height="34"/>
-    </svg>`,
+      <image href="${HEAD}" x="40" y="46" width="34" height="34"/></svg>`,
 
     invaders:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#07140d"/>
-      <g fill="#1f5a3d">
-        <rect x="12" y="14" width="2" height="2"/><rect x="44" y="8" width="2" height="2"/>
+      <rect width="160" height="120" fill="#06201d"/>
+      <g fill="#1f5a3d"><rect x="12" y="14" width="2" height="2"/><rect x="44" y="8" width="2" height="2"/>
         <rect x="120" y="20" width="2" height="2"/><rect x="148" y="40" width="2" height="2"/>
-        <rect x="70" y="30" width="2" height="2"/><rect x="100" y="52" width="2" height="2"/>
-      </g>
-      <g>
-        ${[0,1,2].map(r=>[0,1,2,3].map(c=>{
-          const x=30+c*30, y=18+r*20;
-          const col=['#62e29a','#2fc56f','#27b063'][r];
-          return `<g transform="translate(${x},${y})" fill="${col}">
-            <rect x="-9" y="-6" width="18" height="12" rx="4"/>
-            <rect x="-11" y="2" width="4" height="5"/><rect x="7" y="2" width="4" height="5"/>
-            <circle cx="-4" cy="-1" r="2.2" fill="#06150d"/><circle cx="4" cy="-1" r="2.2" fill="#06150d"/>
-          </g>`;
-        }).join('')).join('')}
-      </g>
+        <rect x="70" y="30" width="2" height="2"/><rect x="100" y="52" width="2" height="2"/></g>
+      <g>${[0,1,2].map(r=>[0,1,2,3].map(c=>{const x=30+c*30,y=18+r*20,col=['#62e29a','#2fc56f','#27b063'][r];
+        return `<g transform="translate(${x},${y})" fill="${col}"><rect x="-9" y="-6" width="18" height="12" rx="4"/>
+        <rect x="-11" y="2" width="4" height="5"/><rect x="7" y="2" width="4" height="5"/>
+        <circle cx="-4" cy="-1" r="2.2" fill="#06150d"/><circle cx="4" cy="-1" r="2.2" fill="#06150d"/></g>`;}).join('')).join('')}</g>
       <g fill="#ffff88"><rect x="79" y="78" width="2" height="8"/></g>
       <polygon points="80,108 74,116 86,116" fill="#2fc56f"/>
-      <image href="${HEAD}" x="66" y="88" width="28" height="28"/>
-    </svg>`,
+      <image href="${HEAD}" x="66" y="88" width="28" height="28"/></svg>`,
 
     snake:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#07140d"/>
-      <g stroke="#0f2c1e" stroke-width="1">
-        ${[20,40,60,80,100,120,140].map(x=>`<line x1="${x}" y1="0" x2="${x}" y2="120"/>`).join('')}
-        ${[20,40,60,80,100].map(y=>`<line x1="0" y1="${y}" x2="160" y2="${y}"/>`).join('')}
-      </g>
-      <g fill="#2fc56f">
-        <rect x="22" y="62" width="16" height="16" rx="5"/>
-        <rect x="40" y="62" width="16" height="16" rx="5"/>
-        <rect x="58" y="62" width="16" height="16" rx="5"/>
-        <rect x="58" y="44" width="16" height="16" rx="5"/>
-        <rect x="76" y="44" width="16" height="16" rx="5"/>
-      </g>
+      <rect width="160" height="120" fill="#06201d"/>
+      <g stroke="#0f2c1e" stroke-width="1">${[20,40,60,80,100,120,140].map(x=>`<line x1="${x}" y1="0" x2="${x}" y2="120"/>`).join('')}
+        ${[20,40,60,80,100].map(y=>`<line x1="0" y1="${y}" x2="160" y2="${y}"/>`).join('')}</g>
+      <g fill="#2fc56f"><rect x="22" y="62" width="16" height="16" rx="5"/><rect x="40" y="62" width="16" height="16" rx="5"/>
+        <rect x="58" y="62" width="16" height="16" rx="5"/><rect x="58" y="44" width="16" height="16" rx="5"/>
+        <rect x="76" y="44" width="16" height="16" rx="5"/></g>
       <image href="${HEAD}" x="94" y="42" width="20" height="20"/>
       <circle cx="128" cy="84" r="9" fill="#f5c518"/>
-      <text x="128" y="88" font-family="sans-serif" font-size="11" font-weight="bold" fill="#c8960a" text-anchor="middle">$</text>
-    </svg>`,
+      <text x="128" y="88" font-family="sans-serif" font-size="11" font-weight="bold" fill="#c8960a" text-anchor="middle">$</text></svg>`,
 
     breakout:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#07140d"/>
-      <g>
-        ${['#0d4631','#1c7a4a','#27b063','#2fc56f'].map((col,r)=>
-          [0,1,2,3,4,5].map(c=>{
-            const x=10+c*24, y=14+r*14;
-            const gold=(r===1&&c===3)||(r===2&&c===1);
-            return `<rect x="${x}" y="${y}" width="22" height="10" rx="2" fill="${gold?'#f5c518':col}"/>`;
-          }).join('')).join('')}
-      </g>
+      <rect width="160" height="120" fill="#06201d"/>
+      <g>${['#0d4631','#1c7a4a','#27b063','#2fc56f'].map((col,r)=>[0,1,2,3,4,5].map(c=>{const x=10+c*24,y=14+r*14,
+        gold=(r===1&&c===3)||(r===2&&c===1);return `<rect x="${x}" y="${y}" width="22" height="10" rx="2" fill="${gold?'#f5c518':col}"/>`;}).join('')).join('')}</g>
       <circle cx="96" cy="84" r="5" fill="#eef6f4"/>
       <rect x="60" y="100" width="46" height="9" rx="4" fill="#2fc56f"/>
-      <image href="${HEAD}" x="74" y="96" width="18" height="18"/>
-    </svg>`,
+      <image href="${HEAD}" x="74" y="96" width="18" height="18"/></svg>`,
 
     skoman:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#07140d"/>
+      <rect width="160" height="120" fill="#06201d"/>
       <g fill="#0c3a26" stroke="#2fc56f" stroke-opacity=".5">
-        <rect x="8" y="10" width="42" height="14" rx="5"/>
-        <rect x="110" y="10" width="42" height="14" rx="5"/>
-        <rect x="66" y="38" width="28" height="20" rx="5"/>
-        <rect x="8" y="92" width="46" height="14" rx="5"/>
-        <rect x="106" y="92" width="46" height="14" rx="5"/>
-      </g>
-      <g fill="#f5e6a8">
-        ${[20,36,52,84,100,116,132].map(x=>`<circle cx="${x}" cy="76" r="2.4"/>`).join('')}
-      </g>
+        <rect x="8" y="10" width="42" height="14" rx="5"/><rect x="110" y="10" width="42" height="14" rx="5"/>
+        <rect x="66" y="38" width="28" height="20" rx="5"/><rect x="8" y="92" width="46" height="14" rx="5"/>
+        <rect x="106" y="92" width="46" height="14" rx="5"/></g>
+      <g fill="#f5e6a8">${[20,36,52,84,100,116,132].map(x=>`<circle cx="${x}" cy="76" r="2.4"/>`).join('')}</g>
       <circle cx="24" cy="34" r="5" fill="#b8f5da"/>
       <image href="${HEAD}" x="52" y="64" width="26" height="26"/>
-      <!-- duch -->
-      <g transform="translate(122,76)">
-        <path d="M-9,2 A9,9 0 0 1 9,2 L9,9 L6,6 L3,9 L0,6 L-3,9 L-6,6 L-9,9 Z" fill="#ff6a6a"/>
+      <g transform="translate(122,76)"><path d="M-9,2 A9,9 0 0 1 9,2 L9,9 L6,6 L3,9 L0,6 L-3,9 L-6,6 L-9,9 Z" fill="#ff6a6a"/>
         <circle cx="-3" cy="0" r="2.4" fill="#fff"/><circle cx="3" cy="0" r="2.4" fill="#fff"/>
-        <circle cx="-3" cy="0" r="1.1" fill="#1b2a6b"/><circle cx="3" cy="0" r="1.1" fill="#1b2a6b"/>
+        <circle cx="-3" cy="0" r="1.1" fill="#1b2a6b"/><circle cx="3" cy="0" r="1.1" fill="#1b2a6b"/></g></svg>`,
+
+    cliptris:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
+      <rect width="160" height="120" fill="#06201d"/>
+      <rect x="52" y="6" width="56" height="108" fill="#08231f" stroke="#1d4a44" stroke-width="2"/>
+      <g>
+        <rect x="54" y="92" width="18" height="18" fill="#7e9a90"/>
+        <rect x="72" y="92" width="18" height="18" fill="#34625b"/>
+        <rect x="90" y="92" width="18" height="18" fill="#a9c4ba"/>
+        <rect x="54" y="74" width="18" height="18" fill="#34625b"/>
+        <rect x="90" y="74" width="18" height="18" fill="#f5c518"/>
+        <rect x="72" y="56" width="18" height="18" fill="#7e9a90"/>
+        <rect x="90" y="56" width="18" height="18" fill="#34625b"/>
       </g>
-    </svg>`,
+      <g fill="#a9c4ba"><rect x="72" y="14" width="18" height="18"/><rect x="72" y="32" width="18" height="18"/>
+        <rect x="90" y="32" width="18" height="18"/></g></svg>`,
+
+    pro:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
+      <rect width="160" height="120" fill="#06201d"/>
+      <g transform="translate(80,52)">
+        <rect x="-20" y="-4" width="40" height="34" rx="6" fill="#0c302c" stroke="#34625b" stroke-width="2"/>
+        <path d="M-12,-4 v-8 a12,12 0 0 1 24,0 v8" fill="none" stroke="#7e9a90" stroke-width="4"/>
+        <circle cx="0" cy="11" r="4" fill="#a9c4ba"/><rect x="-2" y="11" width="4" height="9" fill="#a9c4ba"/>
+      </g>
+      <text x="80" y="100" font-family="'PixelArcade',monospace" font-size="12" fill="#7e9a90" text-anchor="middle" letter-spacing="2">PRO</text></svg>`,
   };
 
   const GAMES = [
-    { title:'FLAPPY SKOPILOT', genre:'LET A UHÝBEJ',   url:'flappy/index.html',   hi:'sko_flappy_best',   art:ART.flappy },
-    { title:'SKOINVADERS',     genre:'STŘÍLEJ VETŘELCE',url:'invaders/index.html', hi:'sko_invaders_best', art:ART.invaders },
-    { title:'SKOSNAKE',        genre:'SBÍREJ MINCE',    url:'snake/index.html',    hi:'sko_snake_best',    art:ART.snake },
-    { title:'SKOBREAKOUT',     genre:'ROZBIJ CIHLY',    url:'breakout/index.html', hi:'sko_breakout_best', art:ART.breakout },
-    { title:'SKOMAN',          genre:'BLUDIŠTĚ & DUCHOVÉ',url:'skoman/index.html', hi:'sko_man_best',      art:ART.skoman },
+    { title:'FLAPPY ŠKOPILOT', genre:'FLY &amp; DODGE',    url:'flappy/index.html',   hi:'sko_flappy_best',   art:ART.flappy },
+    { title:'ŠKOINVADERS',     genre:'SHOOT INVADERS',     url:'invaders/index.html', hi:'sko_invaders_best', art:ART.invaders },
+    { title:'ŠKOSNAKE',        genre:'COLLECT COINS',      url:'snake/index.html',    hi:'sko_snake_best',    art:ART.snake },
+    { title:'ŠKOBREAKOUT',     genre:'SMASH BRICKS',       url:'breakout/index.html', hi:'sko_breakout_best', art:ART.breakout },
+    { title:'ŠKOMAN',          genre:'MAZE &amp; GHOSTS',  url:'skoman/index.html',   hi:'sko_man_best',      art:ART.skoman },
   ];
 
-  const grid = document.getElementById('grid');
-  let sel = 0;
-
+  // ŠkoPilot — hratelné
+  const rowGames=document.getElementById('row-games');
+  let sel=0;
   GAMES.forEach((g,i)=>{
-    const hi = localStorage.getItem(g.hi) || 0;
-    const card = document.createElement('div');
-    card.className = 'card' + (i===0?' sel':'');
-    card.innerHTML =
-      '<div class="frame">'+g.art+'</div>' +
-      '<div class="cap">'+g.title+'</div>' +
-      '<div class="genre">'+g.genre+'</div>' +
+    const hi=localStorage.getItem(g.hi)||0;
+    const card=document.createElement('div');
+    card.className='card'+(i===0?' sel':'');
+    card.innerHTML='<div class="frame">'+g.art+'</div>'+
+      '<div class="cap">'+g.title+'</div>'+
+      '<div class="genre">'+g.genre+'</div>'+
       '<div class="hi">HI '+String(hi).padStart(5,'0')+'</div>';
-    card.addEventListener('click', ()=>{ sel=i; render(); launch(); });
-    card.addEventListener('mouseenter', ()=>{ sel=i; render(); });
-    grid.appendChild(card);
+    card.addEventListener('click',()=>{ sel=i; render(); launch(); });
+    card.addEventListener('mouseenter',()=>{ sel=i; render(); });
+    rowGames.appendChild(card);
   });
-
-  const cards = [...document.querySelectorAll('.card')];
+  const cards=[...rowGames.querySelectorAll('.card')];
   function render(){ cards.forEach((c,i)=>c.classList.toggle('sel', i===sel)); }
-  function launch(){ window.location.href = GAMES[sel].url; }
+  function launch(){ window.location.href=GAMES[sel].url; }
 
-  document.addEventListener('keydown', e=>{
+  // ŠkoPilot Clip — ClipTris (soon)
+  document.getElementById('row-clip').innerHTML=
+    '<div class="card soon" title="Coming soon">'+
+      '<div class="frame"><div class="ribbon">SOON</div>'+ART.cliptris+'</div>'+
+      '<div class="cap">CLIPTRIS</div>'+
+      '<div class="genre">STACK THE BLOCKS</div>'+
+      '<div class="hi">COMING SOON</div></div>';
+
+  // ŠkoPilot Pro — soon
+  document.getElementById('row-pro').innerHTML=
+    '<div class="card soon" title="Coming soon">'+
+      '<div class="frame"><div class="ribbon">SOON</div>'+ART.pro+'</div>'+
+      '<div class="cap">ŠKOPILOT PRO</div>'+
+      '<div class="genre">MORE TO COME</div>'+
+      '<div class="hi">COMING SOON</div></div>';
+
+  document.addEventListener('keydown',e=>{
     switch(e.key){
       case 'ArrowRight': case 'd': case 'ArrowDown': case 's':
         sel=(sel+1)%GAMES.length; render(); break;
@@ -258,7 +287,7 @@
     }
   });
 
-  // === Retro hvězdné pole ===
+  // === hvězdné pole (šalvějové) ===
   const sc=document.getElementById('stars'), sx=sc.getContext('2d');
   let starsArr=[];
   function resizeStars(){
@@ -270,26 +299,19 @@
   window.addEventListener('resize', resizeStars); resizeStars();
   (function starLoop(){
     requestAnimationFrame(starLoop);
-    sx.fillStyle='#02080c'; sx.fillRect(0,0,sc.width,sc.height);
-    for(const st of starsArr){
-      st.y+=st.v; if(st.y>sc.height){st.y=0;st.x=Math.random()*sc.width;}
-      sx.fillStyle=st.s===2?'#62e29a':'#1f5a3d'; sx.fillRect(st.x|0,st.y|0,st.s,st.s);
-    }
+    sx.fillStyle='#092725'; sx.fillRect(0,0,sc.width,sc.height);
+    for(const st of starsArr){ st.y+=st.v; if(st.y>sc.height){st.y=0;st.x=Math.random()*sc.width;}
+      sx.fillStyle=st.s===2?'#a9c4ba':'#1d4a44'; sx.fillRect(st.x|0,st.y|0,st.s,st.s); }
   })();
 
-  // gamepad (volitelně)
   window.addEventListener('gamepadconnected', ()=>{
     let prev=0;
     (function poll(){
       const gp=navigator.getGamepads()[0];
-      if(gp){
-        const x=gp.axes[0]||0, now=Date.now();
-        if(now-prev>220){
-          if(x>0.5){ sel=(sel+1)%GAMES.length; render(); prev=now; }
-          else if(x<-0.5){ sel=(sel-1+GAMES.length)%GAMES.length; render(); prev=now; }
-        }
-        if(gp.buttons.some(b=>b.pressed)) launch();
-      }
+      if(gp){ const x=gp.axes[0]||0, now=Date.now();
+        if(now-prev>220){ if(x>0.5){sel=(sel+1)%GAMES.length;render();prev=now;}
+          else if(x<-0.5){sel=(sel-1+GAMES.length)%GAMES.length;render();prev=now;} }
+        if(gp.buttons.some(b=>b.pressed)) launch(); }
       requestAnimationFrame(poll);
     })();
   });

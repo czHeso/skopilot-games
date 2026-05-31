@@ -1,10 +1,16 @@
-# 🕹️ ŠkoPilot Games — ŠkoPilot Edition
+# 🕹️ ŠkoPilot Family — Arcade
 
 Sbírka mini‑her s maskotem **ŠkoPilot**, připravená pro arkádový automat
 **Arcade1Up Pac‑Man 40th Anniversary** poháněný **Raspberry Pi 4**.
 
 Vše je čisté HTML/JS/Canvas — žádný build, žádné závislosti. Stačí otevřít
 `index.html` v prohlížeči.
+
+Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený do kategorií:
+
+- **ŠkoPilot** — hratelné hry (níže v tabulce)
+- **ŠkoPilot Clip** — *ClipTris* (Tetris) — zatím jen náhled „SOON"
+- **ŠkoPilot Pro** — zatím „SOON"
 
 ## Co je uvnitř
 

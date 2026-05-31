@@ -127,7 +127,7 @@ document.addEventListener('keydown', e => {
       spacePressed = true;
     } else if (state==='playing') {
       if (bullets.length === 0 && !spacePressed) {
-        bullets.push({ x:player.x, y:player.y-player.h/2, w:4, h:14, speed:6 });
+        bullets.push({ x:player.x, y:player.y-player.h/2, w:4, h:14, speed:4 });
         spacePressed = true;
       }
     }
@@ -209,7 +209,7 @@ function update(dt) {
   if (Math.random() < 0.005) {
     if (aliveEnemies.length) {
       const shooter = aliveEnemies[Math.floor(Math.random()*aliveEnemies.length)];
-      enemyBullets.push({ x:shooter.x, y:shooter.y+shooter.h/2, speed:3 });
+      enemyBullets.push({ x:shooter.x, y:shooter.y+shooter.h/2, speed:2 });
     }
   }
 

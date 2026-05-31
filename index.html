@@ -194,6 +194,28 @@
       <rect x="60" y="100" width="46" height="9" rx="4" fill="#2fc56f"/>
       <image href="${HEAD}" x="74" y="96" width="18" height="18"/>
     </svg>`,
+
+    skoman:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
+      <rect width="160" height="120" fill="#07140d"/>
+      <g fill="#0c3a26" stroke="#2fc56f" stroke-opacity=".5">
+        <rect x="8" y="10" width="42" height="14" rx="5"/>
+        <rect x="110" y="10" width="42" height="14" rx="5"/>
+        <rect x="66" y="38" width="28" height="20" rx="5"/>
+        <rect x="8" y="92" width="46" height="14" rx="5"/>
+        <rect x="106" y="92" width="46" height="14" rx="5"/>
+      </g>
+      <g fill="#f5e6a8">
+        ${[20,36,52,84,100,116,132].map(x=>`<circle cx="${x}" cy="76" r="2.4"/>`).join('')}
+      </g>
+      <circle cx="24" cy="34" r="5" fill="#b8f5da"/>
+      <image href="${HEAD}" x="52" y="64" width="26" height="26"/>
+      <!-- duch -->
+      <g transform="translate(122,76)">
+        <path d="M-9,2 A9,9 0 0 1 9,2 L9,9 L6,6 L3,9 L0,6 L-3,9 L-6,6 L-9,9 Z" fill="#ff6a6a"/>
+        <circle cx="-3" cy="0" r="2.4" fill="#fff"/><circle cx="3" cy="0" r="2.4" fill="#fff"/>
+        <circle cx="-3" cy="0" r="1.1" fill="#1b2a6b"/><circle cx="3" cy="0" r="1.1" fill="#1b2a6b"/>
+      </g>
+    </svg>`,
   };
 
   const GAMES = [
@@ -201,6 +223,7 @@
     { title:'SKOINVADERS',     genre:'STŘÍLEJ VETŘELCE',url:'invaders/index.html', hi:'sko_invaders_best', art:ART.invaders },
     { title:'SKOSNAKE',        genre:'SBÍREJ MINCE',    url:'snake/index.html',    hi:'sko_snake_best',    art:ART.snake },
     { title:'SKOBREAKOUT',     genre:'ROZBIJ CIHLY',    url:'breakout/index.html', hi:'sko_breakout_best', art:ART.breakout },
+    { title:'SKOMAN',          genre:'BLUDIŠTĚ & DUCHOVÉ',url:'skoman/index.html', hi:'sko_man_best',      art:ART.skoman },
   ];
 
   const grid = document.getElementById('grid');

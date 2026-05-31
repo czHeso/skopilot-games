@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ŠkoMan</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html,body{height:100%;}
+    body { background:#03100a; display:flex; align-items:center; justify-content:center;
+           height:100vh; overflow:hidden; font-family:'Trebuchet MS', system-ui, sans-serif;
+           color:#eef6f4; user-select:none; }
+    body::after{
+      content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);
+    }
+    #stage{ transform-origin:center center; position:relative; }
+    #hud { display:flex; gap:1.6rem; margin-bottom:.7rem; font-size:18px; color:#5a8a72; letter-spacing:1px; }
+    #hud span { font-weight:700; color:#eef6f4; }
+    canvas { border-radius:8px; border:2px solid #1c4a35; display:block; background:#07140d;
+             box-shadow:0 0 30px rgba(47,197,111,.25); }
+    #hint { margin-top:.6rem; font-size:14px; color:#3f6b55; text-align:center; }
+    #menuBtn{
+      position:fixed; top:14px; left:14px; z-index:60;
+      background:#0c2418; color:#b8f5da; border:1px solid #235c41;
+      border-radius:8px; padding:8px 14px; font-size:15px; letter-spacing:1px;
+      cursor:pointer; font-family:inherit;
+    }
+    #menuBtn:hover{ background:#11331f; }
+  </style>
+</head>
+<body>
+  <button id="menuBtn" onclick="location.href='../index.html'">◀ MENU</button>
+  <div id="stage">
+    <div id="hud">SKÓRE: <span id="score">0</span>&nbsp; NEJL.: <span id="best">0</span>&nbsp; 🪙 <span id="coins">0</span>&nbsp; LVL: <span id="level">1</span>&nbsp; ❤ <span id="lives">3</span></div>
+    <canvas id="c" width="532" height="588"></canvas>
+    <div id="hint">Šipky / WASD = pohyb &nbsp;|&nbsp; sněz mince, uteč duchům, mátová mince = lov &nbsp;|&nbsp; ESC = menu</div>
+  </div>
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score');
+const bestEl =document.getElementById('best');
+const coinsEl=document.getElementById('coins');
+const levelEl=document.getElementById('level');
+const livesEl=document.getElementById('lives');
+const stage  =document.getElementById('stage');
+
+function fitStage(){
+  const s=Math.min(window.innerWidth/stage.offsetWidth, window.innerHeight/stage.offsetHeight);
+  stage.style.transform='scale('+s+')';
+}
+window.addEventListener('resize', fitStage);
+window.addEventListener('load', fitStage);
+fitStage();
+
+const headImg=new Image();
+headImg.src='../invaders/skopilotHead.png';
+
+// === BLUDIŠTĚ ===  # zeď, . mince, o mátová mince, P start hráče, G start ducha, T tunel
+const MAZE=[
+"###################",
+"#........#........#",
+"#o##.###.#.###.##o#",
+"#.................#",
+"#.##.#.#####.#.##.#",
+"#....#...#...#....#",
+"####.###.#.###.####",
+"   #.#.......#.#   ",
+"####.#.#####.#.####",
+"T......G.G.G......T",
+"####.#.#####.#.####",
+"   #.#.......#.#   ",
+"####.#.#####.#.####",
+"#........#........#",
+"#o##.###.#.###.##o#",
+"#..#.....P.....#..#",
+"##.#.#.#####.#.#.##",
+"#....#...#...#....#",
+"#.######.#.######.#",
+"#.................#",
+"###################",
+];
+const COLS=MAZE[0].length, ROWS=MAZE.length;
+const TILE=28;
+const TUNNEL_ROW=9;
+
+let grid;                 // měnitelná kopie (mince mizí)
+let player, ghosts;
+let score, best, coins, lives, level, dotsLeft, state;
+let frightenedUntil=0;
+const GHOST_COLORS=['#ff6a6a','#ffd23f','#62e29a'];
+
+best=+localStorage.getItem('sko_man_best')||0;
+bestEl.textContent=best;
+
+function isWall(tx,ty){
+  if(ty<0||ty>=ROWS) return true;
+  if(tx<0||tx>=COLS) return ty!==TUNNEL_ROW;   // otevřené jen v tunelu
+  return MAZE[ty][tx]==='#';
+}
+const cToPx=t=>t*TILE+TILE/2;
+function aligned(e){ return ((e.x-TILE/2)%TILE===0)&&((e.y-TILE/2)%TILE===0); }
+function tileOf(e){ return [Math.round((e.x-TILE/2)/TILE), Math.round((e.y-TILE/2)/TILE)]; }
+
+function buildGrid(){
+  grid=MAZE.map(r=>r.split(''));
+  dotsLeft=0;
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    const c=grid[y][x];
+    if(c==='.'||c==='o') dotsLeft++;
+  }
+}
+
+function spawnEntities(){
+  let pTile,gTiles=[];
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    if(MAZE[y][x]==='P') pTile=[x,y];
+    if(MAZE[y][x]==='G') gTiles.push([x,y]);
+  }
+  player={ x:cToPx(pTile[0]), y:cToPx(pTile[1]), dir:{x:0,y:0}, next:{x:0,y:0}, speed:2, mouth:0 };
+  ghosts=gTiles.map((t,i)=>({
+    x:cToPx(t[0]), y:cToPx(t[1]), spawn:[t[0],t[1]],
+    dir:{x:(i%2?1:-1),y:0}, speed:2, color:GHOST_COLORS[i%GHOST_COLORS.length], eaten:false
+  }));
+}
+
+function newLevel(keepScore){
+  buildGrid();
+  spawnEntities();
+  frightenedUntil=0;
+  state='idle';
+}
+
+function init(){
+  score=0; coins=0; lives=3; level=1;
+  scoreEl.textContent=0; coinsEl.textContent=0; levelEl.textContent=1; livesEl.textContent=3;
+  newLevel();
+}
+
+function frightActive(){ return performance.now()<frightenedUntil; }
+function frightFlash(){ return frightActive() && (frightenedUntil-performance.now()<2200) && (Math.floor(performance.now()/220)%2===0); }
+
+// === OVLÁDÁNÍ ===
+document.addEventListener('keydown',e=>{
+  switch(e.key){
+    case 'ArrowUp': case 'w': e.preventDefault(); player.next={x:0,y:-1}; begin(); break;
+    case 'ArrowDown': case 's': e.preventDefault(); player.next={x:0,y:1}; begin(); break;
+    case 'ArrowLeft': case 'a': e.preventDefault(); player.next={x:-1,y:0}; begin(); break;
+    case 'ArrowRight': case 'd': e.preventDefault(); player.next={x:1,y:0}; begin(); break;
+    case ' ': case 'Enter':
+      e.preventDefault();
+      if(state==='idle') state='playing';
+      else if(state==='gameover'){ init(); state='playing'; }
+      else if(state==='win'){ newLevel(); state='playing'; }  // další level, skóre zůstává
+      break;
+    case 'Escape': location.href='../index.html'; break;
+  }
+});
+function begin(){ if(state==='idle') state='playing'; }
+
+function saveBest(){ if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('sko_man_best',best); } }
+
+// === LOGIKA ===
+function wrap(e){
+  if(e.x < 0) e.x += COLS*TILE;
+  else if(e.x >= COLS*TILE) e.x -= COLS*TILE;
+}
+
+function stepPlayer(){
+  if(aligned(player)){
+    wrap(player);
+    const [tx,ty]=tileOf(player);
+    // sběr mince
+    const c=grid[ty] && grid[ty][tx];
+    if(c==='.'){ grid[ty][tx]=' '; score+=10; coins++; dotsLeft--; }
+    else if(c==='o'){ grid[ty][tx]=' '; score+=50; coins++; dotsLeft--;
+      frightenedUntil=performance.now()+7000;
+      for(const g of ghosts){ if(!g.eaten) g.dir={x:-g.dir.x,y:-g.dir.y}; } // útěk
+    }
+    scoreEl.textContent=score; coinsEl.textContent=coins; saveBest();
+    if(dotsLeft<=0){ saveBest(); state='win'; level++; return; }
+    // zatočení
+    if((player.next.x||player.next.y) && !isWall(tx+player.next.x, ty+player.next.y)) player.dir=player.next;
+    // zeď před námi → stůj
+    if(isWall(tx+player.dir.x, ty+player.dir.y)) player.stopped=true; else player.stopped=false;
+  }
+  if(!player.stopped){ player.x+=player.dir.x*player.speed; player.y+=player.dir.y*player.speed; }
+  player.mouth=(player.mouth+0.15)%(Math.PI);
+}
+
+function chooseGhostDir(g,tx,ty){
+  const target = g.eaten ? g.spawn : tileOf(player);
+  const opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(d=>{
+    if(d[0]===-g.dir.x && d[1]===-g.dir.y) return false;
+    return !isWall(tx+d[0],ty+d[1]);
+  });
+  let choice;
+  if(opts.length===0){ choice=[-g.dir.x,-g.dir.y]; }
+  else if(frightActive() && !g.eaten){ choice=opts[(Math.random()*opts.length)|0]; }
+  else {
+    let bd=1e9;
+    for(const d of opts){ const nx=tx+d[0],ny=ty+d[1];
+      const dist=(nx-target[0])**2+(ny-target[1])**2;
+      if(dist<bd){ bd=dist; choice=d; } }
+  }
+  g.dir={x:choice[0],y:choice[1]};
+  g.speed = g.eaten ? 4 : (frightActive() ? 1 : 2);
+}
+
+function stepGhost(g){
+  if(aligned(g)){
+    wrap(g);
+    const [tx,ty]=tileOf(g);
+    if(g.eaten && tx===g.spawn[0] && ty===g.spawn[1]){ g.eaten=false; }
+    chooseGhostDir(g,tx,ty);
+  }
+  g.x+=g.dir.x*g.speed; g.y+=g.dir.y*g.speed;
+}
+
+function checkCollisions(){
+  const [px,py]=tileOf(player);
+  for(const g of ghosts){
+    const [gx,gy]=tileOf(g);
+    if(px===gx && py===gy){
+      if(g.eaten) continue;
+      if(frightActive()){
+        g.eaten=true; score+=200; saveBest(); scoreEl.textContent=score;
+      } else {
+        loseLife(); return;
+      }
+    }
+  }
+}
+
+function loseLife(){
+  lives--; livesEl.textContent=lives;
+  if(lives<=0){ saveBest(); state='gameover'; return; }
+  // reset pozic, mince zůstávají
+  spawnEntities();
+  frightenedUntil=0;
+  state='idle';
+}
+
+function update(){
+  stepPlayer();
+  if(state!=='playing') return;
+  for(const g of ghosts) stepGhost(g);
+  checkCollisions();
+}
+
+// === VYKRESLENÍ ===
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+function drawMaze(){
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    if(MAZE[y][x]==='#'){
+      const px=x*TILE, py=y*TILE;
+      ctx.fillStyle='#0c3a26';
+      roundRect(px+2,py+2,TILE-4,TILE-4,6); ctx.fill();
+      ctx.save(); ctx.globalAlpha=.5; ctx.strokeStyle='#2fc56f'; ctx.lineWidth=1.5;
+      roundRect(px+2,py+2,TILE-4,TILE-4,6); ctx.stroke(); ctx.restore();
+    }
+  }
+}
+
+function drawDots(){
+  const pulse=5+Math.sin(performance.now()/200)*1.6;
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    const c=grid[y][x];
+    if(c==='.'){
+      ctx.fillStyle='#f5e6a8';
+      ctx.beginPath(); ctx.arc(cToPx(x),cToPx(y),2.6,0,Math.PI*2); ctx.fill();
+    } else if(c==='o'){
+      ctx.save(); ctx.shadowColor='#b8f5da'; ctx.shadowBlur=12;
+      ctx.fillStyle='#b8f5da';
+      ctx.beginPath(); ctx.arc(cToPx(x),cToPx(y),pulse,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+function drawPlayer(){
+  const s=TILE*1.02;
+  if(headImg.complete && headImg.naturalWidth!==0){
+    ctx.drawImage(headImg, player.x-s/2, player.y-s/2, s, s);
+  } else {
+    ctx.fillStyle='#2fc56f';
+    ctx.beginPath(); ctx.arc(player.x,player.y,TILE*0.45,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawGhost(g){
+  const r=TILE*0.42, x=g.x, y=g.y-1;
+  let body;
+  if(g.eaten) body=null;
+  else if(frightFlash()) body='#eef6f4';
+  else if(frightActive()) body='#3a7bff';
+  else body=g.color;
+
+  if(body){
+    ctx.fillStyle=body;
+    ctx.beginPath();
+    ctx.arc(x, y, r, Math.PI, 0);
+    ctx.lineTo(x+r, y+r);
+    // vlnité nožičky
+    const n=3, w=(2*r)/n;
+    for(let i=0;i<n;i++){
+      const bx=x+r-i*w;
+      ctx.lineTo(bx-w/2, y+r-4);
+      ctx.lineTo(bx-w, y+r);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  // oči
+  const ex=g.dir.x*2, ey=g.dir.y*2;
+  if(frightActive() && !g.eaten && !frightFlash()){
+    // vystrašený obličej
+    ctx.fillStyle='#b8f5da';
+    ctx.beginPath(); ctx.arc(x-5,y-2,2.4,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+5,y-2,2.4,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#b8f5da'; ctx.lineWidth=1.4;
+    ctx.beginPath();
+    ctx.moveTo(x-6,y+6); ctx.lineTo(x-3,y+3); ctx.lineTo(x,y+6); ctx.lineTo(x+3,y+3); ctx.lineTo(x+6,y+6);
+    ctx.stroke();
+  } else {
+    for(const dx of [-5,5]){
+      ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.ellipse(x+dx, y-1, 3.2, 4, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#1b2a6b';
+      ctx.beginPath(); ctx.arc(x+dx+ex, y-1+ey, 1.8, 0, Math.PI*2); ctx.fill();
+    }
+  }
+}
+
+function drawOverlay(){
+  ctx.fillStyle='rgba(3,16,10,0.82)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.textAlign='center';
+  const cx=canvas.width/2, cy=canvas.height/2;
+  if(state==='idle'){
+    ctx.fillStyle='#2fc56f'; ctx.font='900 44px Trebuchet MS, sans-serif';
+    ctx.fillText('ŠkoMan',cx,cy-46);
+    ctx.fillStyle='#cdeede'; ctx.font='16px sans-serif';
+    ctx.fillText('Sněz všechny mince a uteč duchům.',cx,cy-12);
+    ctx.fillText('Mátová mince = můžeš duchy lovit!',cx,cy+12);
+    ctx.fillStyle='#ffff44'; ctx.font='bold 16px sans-serif';
+    ctx.fillText('Šipka nebo Mezerník = start',cx,cy+48);
+  } else if(state==='gameover'){
+    ctx.fillStyle='#ff6a6a'; ctx.font='900 46px Trebuchet MS, sans-serif';
+    ctx.fillText('KONEC HRY',cx,cy-26);
+    ctx.fillStyle='#cdeede'; ctx.font='18px sans-serif';
+    ctx.fillText('Skóre: '+score+'   Nejlepší: '+best,cx,cy+10);
+    ctx.fillStyle='#ffff44'; ctx.font='bold 16px sans-serif';
+    ctx.fillText('Mezerník pro restart',cx,cy+44);
+  } else if(state==='win'){
+    ctx.fillStyle='#2fc56f'; ctx.font='900 42px Trebuchet MS, sans-serif';
+    ctx.fillText('LEVEL '+(level-1)+' HOTOVO!',cx,cy-26);
+    ctx.fillStyle='#cdeede'; ctx.font='18px sans-serif';
+    ctx.fillText('Skóre: '+score,cx,cy+10);
+    ctx.fillStyle='#ffff44'; ctx.font='bold 16px sans-serif';
+    ctx.fillText('Mezerník = další level',cx,cy+44);
+  }
+}
+
+// === SMYČKA (pevný krok 60 Hz) ===
+let acc=0, lastTs=0;
+const STEP=1000/60;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(!lastTs) lastTs=ts;
+  acc+=Math.min(ts-lastTs,100); lastTs=ts;
+  while(acc>=STEP){ acc-=STEP; if(state==='playing') update(); }
+
+  ctx.fillStyle='#07140d'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  drawMaze();
+  drawDots();
+  for(const g of ghosts) drawGhost(g);
+  drawPlayer();
+  if(state!=='playing') drawOverlay();
+
+  // při výhře přejdi do dalšího levelu po stisku (řeší keydown init? ne) -> připrav nové pole
+  levelEl.textContent=level;
+}
+
+init();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

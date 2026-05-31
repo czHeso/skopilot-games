@@ -15,6 +15,7 @@ Vše je čisté HTML/JS/Canvas — žádný build, žádné závislosti. Stačí
 | `invaders/` | **ŠkoInvaders** | vesmírná střílečka | ← → + Mezerník |
 | `snake/` | **ŠkoSnake** | sbírání mincí | šipky / WASD |
 | `breakout/` | **ŠkoBreakout** | arkanoid s pádlem | ← → + Mezerník |
+| `skoman/` | **ŠkoMan** | bludiště à la Pac-Man | šipky / WASD |
 
 Všechny hry:
 - jdou **přes celou obrazovku** (automaticky se přizpůsobí poměru displeje),

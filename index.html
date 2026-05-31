@@ -44,12 +44,16 @@
     background:radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,.25) 100%);
   }
 
+  .brand{display:flex;align-items:center;justify-content:center;gap:clamp(14px,3vw,52px);}
   .logo{
-    height:clamp(54px,11vh,120px);width:auto;
-    filter:drop-shadow(0 0 18px rgba(126,154,144,.35));
+    height:clamp(54px,11vh,120px);width:auto;   /* bez svícení */
+  }
+  .mascot{
+    height:clamp(74px,16vh,168px);width:auto;
+    filter:drop-shadow(0 10px 10px rgba(0,0,0,.4));  /* jen jemný stín pod nohama */
     animation:bob 3s steps(2,end) infinite;
   }
-  @keyframes bob{50%{transform:translateY(-5px);}}
+  @keyframes bob{50%{transform:translateY(-6px);}}
 
   /* KATEGORIE */
   .cat{width:min(1100px,96vw);margin-top:clamp(10px,2.4vh,26px);}
@@ -121,7 +125,11 @@
 <body>
   <canvas id="stars"></canvas>
   <div id="screen">
-    <img class="logo" src="assets/logo.png" alt="ŠkoPilot Family">
+    <div class="brand">
+      <img class="logo" src="assets/logo.png" alt="ŠkoPilot Family">
+      <img class="mascot" src="assets/skopilot.png"
+           onerror="this.onerror=null;this.src='invaders/skopilotHead.png'" alt="ŠkoPilot">
+    </div>
 
     <!-- KATEGORIE: ŠKOPILOT -->
     <div class="cat">

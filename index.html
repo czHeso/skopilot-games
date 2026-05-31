@@ -49,10 +49,15 @@
   .two{display:flex;flex-wrap:wrap;gap:clamp(16px,2.6vw,44px);}
   .col{flex:1;min-width:180px;max-width:540px;}
 
+  /* hlavní hry: mřížka (široko = 5 v řadě) */
+  #row-games{display:grid;grid-template-columns:repeat(5,1fr);gap:clamp(10px,1.2vw,20px);}
+  #row-games .card{width:auto;}
+
   .card{width:clamp(108px,11.5vw,172px);display:flex;flex-direction:column;
     cursor:pointer;transition:transform .14s;}
   .frame{width:100%;aspect-ratio:4/3;position:relative;border-radius:11px;overflow:hidden;
-    border:3px solid var(--line);background:#06201d;
+    border:3px solid var(--line);
+    background:radial-gradient(125% 100% at 50% 0%, #103a33 0%, #0a2824 48%, #051b18 100%);
     box-shadow:inset 0 0 0 2px var(--bg), 0 8px 18px rgba(0,0,0,.5);}
   .frame svg{display:block;width:100%;height:100%;}
   .frame::after{content:"";position:absolute;inset:0;pointer-events:none;
@@ -109,6 +114,16 @@
     padding:0 12px clamp(10px,2.2vh,22px);}
   .hint{font-size:clamp(6px,1vw,10px);color:var(--teal);letter-spacing:1px;}
   .credit{font-size:clamp(6px,1vw,9px);color:#24514a;letter-spacing:1px;}
+
+  /* ===== SKORO ČTVEREC (4:3 automat) ===== */
+  @media (min-aspect-ratio:1/1) and (max-aspect-ratio:3/2){
+    .main{gap:clamp(14px,2.2vw,34px);}
+    #games{flex:1.55;gap:clamp(10px,1.8vh,22px);}
+    #row-games{grid-template-columns:repeat(3,1fr);}   /* 3 + 2 */
+    #hero{flex:.95;}
+    .mascot{max-height:clamp(180px,40vh,380px);}
+    .logo{height:clamp(50px,9vh,104px);}
+  }
 
   /* ===== PORTRÉT / ÚZKÁ OBRAZOVKA ===== */
   @media (max-aspect-ratio:1/1), (max-width:820px){
@@ -170,17 +185,15 @@
 
   const ART = {
     flappy:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#06201d"/>
-      <rect y="108" width="160" height="12" fill="#0d2c1d"/>
+<rect y="108" width="160" height="12" fill="#0d2c1d"/>
       <g fill="#2fc56f"><rect x="98" y="0" width="28" height="40"/><rect x="98" y="80" width="28" height="28"/></g>
       <g fill="#0d4631"><rect x="94" y="36" width="36" height="9"/><rect x="94" y="80" width="36" height="9"/></g>
       <circle cx="140" cy="62" r="9" fill="#f5c518"/>
       <text x="140" y="66" font-family="sans-serif" font-size="11" font-weight="bold" fill="#c8960a" text-anchor="middle">$</text>
-      <image href="${HEAD}" x="40" y="46" width="34" height="34"/></svg>`,
+      <image href="${HEAD}" x="38" y="42" width="42" height="42"/></svg>`,
 
     invaders:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#06201d"/>
-      <g fill="#1f5a3d"><rect x="12" y="14" width="2" height="2"/><rect x="44" y="8" width="2" height="2"/>
+<g fill="#1f5a3d"><rect x="12" y="14" width="2" height="2"/><rect x="44" y="8" width="2" height="2"/>
         <rect x="120" y="20" width="2" height="2"/><rect x="148" y="40" width="2" height="2"/>
         <rect x="70" y="30" width="2" height="2"/><rect x="100" y="52" width="2" height="2"/></g>
       <g>${[0,1,2].map(r=>[0,1,2,3].map(c=>{const x=30+c*30,y=18+r*20,col=['#62e29a','#2fc56f','#27b063'][r];
@@ -192,40 +205,36 @@
       <image href="${HEAD}" x="66" y="88" width="28" height="28"/></svg>`,
 
     snake:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#06201d"/>
-      <g stroke="#0f2c1e" stroke-width="1">${[20,40,60,80,100,120,140].map(x=>`<line x1="${x}" y1="0" x2="${x}" y2="120"/>`).join('')}
+<g stroke="#0f2c1e" stroke-width="1">${[20,40,60,80,100,120,140].map(x=>`<line x1="${x}" y1="0" x2="${x}" y2="120"/>`).join('')}
         ${[20,40,60,80,100].map(y=>`<line x1="0" y1="${y}" x2="160" y2="${y}"/>`).join('')}</g>
       <g fill="#2fc56f"><rect x="22" y="62" width="16" height="16" rx="5"/><rect x="40" y="62" width="16" height="16" rx="5"/>
         <rect x="58" y="62" width="16" height="16" rx="5"/><rect x="58" y="44" width="16" height="16" rx="5"/>
         <rect x="76" y="44" width="16" height="16" rx="5"/></g>
-      <image href="${HEAD}" x="94" y="42" width="20" height="20"/>
+      <image href="${HEAD}" x="92" y="38" width="26" height="26"/>
       <circle cx="128" cy="84" r="9" fill="#f5c518"/>
       <text x="128" y="88" font-family="sans-serif" font-size="11" font-weight="bold" fill="#c8960a" text-anchor="middle">$</text></svg>`,
 
     breakout:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#06201d"/>
-      <g>${['#0d4631','#1c7a4a','#27b063','#2fc56f'].map((col,r)=>[0,1,2,3,4,5].map(c=>{const x=10+c*24,y=14+r*14,
+<g>${['#0d4631','#1c7a4a','#27b063','#2fc56f'].map((col,r)=>[0,1,2,3,4,5].map(c=>{const x=10+c*24,y=14+r*14,
         gold=(r===1&&c===3)||(r===2&&c===1);return `<rect x="${x}" y="${y}" width="22" height="10" rx="2" fill="${gold?'#f5c518':col}"/>`;}).join('')).join('')}</g>
       <circle cx="96" cy="84" r="5" fill="#eef6f4"/>
       <rect x="60" y="100" width="46" height="9" rx="4" fill="#2fc56f"/>
       <image href="${HEAD}" x="74" y="96" width="18" height="18"/></svg>`,
 
     skoman:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#06201d"/>
-      <g fill="#0c3a26" stroke="#2fc56f" stroke-opacity=".5">
+<g fill="#0c3a26" stroke="#2fc56f" stroke-opacity=".5">
         <rect x="8" y="10" width="42" height="14" rx="5"/><rect x="110" y="10" width="42" height="14" rx="5"/>
         <rect x="66" y="38" width="28" height="20" rx="5"/><rect x="8" y="92" width="46" height="14" rx="5"/>
         <rect x="106" y="92" width="46" height="14" rx="5"/></g>
       <g fill="#f5e6a8">${[20,36,52,84,100,116,132].map(x=>`<circle cx="${x}" cy="76" r="2.4"/>`).join('')}</g>
       <circle cx="24" cy="34" r="5" fill="#b8f5da"/>
-      <image href="${HEAD}" x="52" y="64" width="26" height="26"/>
+      <image href="${HEAD}" x="50" y="60" width="32" height="32"/>
       <g transform="translate(122,76)"><path d="M-9,2 A9,9 0 0 1 9,2 L9,9 L6,6 L3,9 L0,6 L-3,9 L-6,6 L-9,9 Z" fill="#ff6a6a"/>
         <circle cx="-3" cy="0" r="2.4" fill="#fff"/><circle cx="3" cy="0" r="2.4" fill="#fff"/>
         <circle cx="-3" cy="0" r="1.1" fill="#1b2a6b"/><circle cx="3" cy="0" r="1.1" fill="#1b2a6b"/></g></svg>`,
 
     cliptris:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#06201d"/>
-      <rect x="52" y="6" width="56" height="108" fill="#08231f" stroke="#1d4a44" stroke-width="2"/>
+<rect x="52" y="6" width="56" height="108" fill="#08231f" stroke="#1d4a44" stroke-width="2"/>
       <g><rect x="54" y="92" width="18" height="18" fill="#7e9a90"/><rect x="72" y="92" width="18" height="18" fill="#34625b"/>
         <rect x="90" y="92" width="18" height="18" fill="#a9c4ba"/><rect x="54" y="74" width="18" height="18" fill="#34625b"/>
         <rect x="90" y="74" width="18" height="18" fill="#f5c518"/><rect x="72" y="56" width="18" height="18" fill="#7e9a90"/>
@@ -234,8 +243,7 @@
         <rect x="90" y="32" width="18" height="18"/></g></svg>`,
 
     pro:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect width="160" height="120" fill="#06201d"/>
-      <g transform="translate(80,52)"><rect x="-20" y="-4" width="40" height="34" rx="6" fill="#0c302c" stroke="#34625b" stroke-width="2"/>
+<g transform="translate(80,52)"><rect x="-20" y="-4" width="40" height="34" rx="6" fill="#0c302c" stroke="#34625b" stroke-width="2"/>
         <path d="M-12,-4 v-8 a12,12 0 0 1 24,0 v8" fill="none" stroke="#7e9a90" stroke-width="4"/>
         <circle cx="0" cy="11" r="4" fill="#a9c4ba"/><rect x="-2" y="11" width="4" height="9" fill="#a9c4ba"/></g>
       <text x="80" y="100" font-family="'PixelArcade',monospace" font-size="12" fill="#7e9a90" text-anchor="middle" letter-spacing="2">PRO</text></svg>`,

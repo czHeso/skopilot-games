@@ -1,0 +1,4 @@
+Press Start 2P font — © The Press Start 2P Project Authors (cody@zone38.net).
+Licensed under the SIL Open Font License, Version 1.1.
+Full license: https://openfontlicense.org
+The font is bundled here so the arcade kiosk works fully offline.

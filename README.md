@@ -10,10 +10,11 @@ Vše je čisté HTML/JS/Canvas — žádný build, žádné závislosti. Stačí
 
 | Cesta | Hra | Žánr | Ovládání |
 |-------|-----|------|----------|
-| `index.html` | **Arcade launcher** | výběr her | šipky + Enter / myš |
+| `index.html` | **Arcade launcher** | retro výběr her | šipky + Enter / myš |
 | `flappy/` | **Flappy ŠkoPilot** | letová obratnost | Mezerník / klik = skok |
 | `invaders/` | **ŠkoInvaders** | vesmírná střílečka | ← → + Mezerník |
 | `snake/` | **ŠkoSnake** | sbírání mincí | šipky / WASD |
+| `breakout/` | **ŠkoBreakout** | arkanoid s pádlem | ← → + Mezerník |
 
 Všechny hry:
 - jdou **přes celou obrazovku** (automaticky se přizpůsobí poměru displeje),
@@ -31,6 +32,10 @@ assets/skopilot.png      (nejlépe PNG s průhledným pozadím, na výšku ~500�
 
 Když soubor chybí, vše automaticky použije hlavu `invaders/skopilotHead.png`,
 takže nic nespadne.
+
+> Úvodní obrazovka je v **8-bit retro** stylu (hvězdné pole, CRT scanlines,
+> pixel font *Press Start 2P*). Font je přibalený v `assets/fonts/`, takže
+> kiosk funguje i **bez internetu**.
 
 ---
 

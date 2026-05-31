@@ -2,25 +2,57 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>ŠkoInvaders</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#0a0e1a; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; color:#eee; }
-    #hud { display:flex; gap:2.5rem; margin-bottom:0.8rem; font-size:20px; color:#888; }
-    #hud span { font-weight:700; color:#eee; font-size:22px; }
-    canvas { border-radius:8px; border:2px solid #1a2a4a; display:block; }
-    #hint { margin-top:0.6rem; font-size:14px; color:#555; }
+    html,body{height:100%;}
+    body { background:#03100a; display:flex; align-items:center; justify-content:center;
+           height:100vh; overflow:hidden; font-family:'Trebuchet MS', system-ui, sans-serif;
+           color:#eef6f4; user-select:none; }
+    body::after{
+      content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);
+    }
+    #stage{ transform-origin:center center; position:relative; }
+    #hud { display:flex; gap:2.2rem; margin-bottom:.7rem; font-size:20px; color:#5a8a72; letter-spacing:1px; }
+    #hud span { font-weight:700; color:#eef6f4; font-size:22px; }
+    canvas { border-radius:8px; border:2px solid #1c4a35; display:block;
+             box-shadow:0 0 30px rgba(47,197,111,.25); }
+    #hint { margin-top:.6rem; font-size:14px; color:#3f6b55; text-align:center; }
+    #menuBtn{
+      position:fixed; top:14px; left:14px; z-index:60;
+      background:#0c2418; color:#b8f5da; border:1px solid #235c41;
+      border-radius:8px; padding:8px 14px; font-size:15px; letter-spacing:1px;
+      cursor:pointer; font-family:inherit;
+    }
+    #menuBtn:hover{ background:#11331f; }
   </style>
 </head>
 <body>
-  <div id="hud">Skóre: <span id="score">0</span>&nbsp;&nbsp; Životy: <span id="lives">3</span></div>
-  <canvas id="c" width="600" height="520"></canvas>
-  <div id="hint">← → nebo A D pro pohyb &nbsp;|&nbsp; Mezerník = střelba</div>
+  <button id="menuBtn" onclick="location.href='../index.html'">◀ MENU</button>
+  <div id="stage">
+    <div id="hud">SKÓRE: <span id="score">0</span>&nbsp;&nbsp; NEJLEPŠÍ: <span id="best">0</span>&nbsp;&nbsp; ŽIVOTY: <span id="lives">3</span></div>
+    <canvas id="c" width="600" height="520"></canvas>
+    <div id="hint">← → nebo A D pohyb &nbsp;|&nbsp; Mezerník = střelba &nbsp;|&nbsp; ESC = menu</div>
+  </div>
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const livesEl = document.getElementById('lives');
+const bestEl  = document.getElementById('best');
+const stage   = document.getElementById('stage');
+
+// === Škálování na celou obrazovku ===
+function fitStage(){
+  const s = Math.min(window.innerWidth / stage.offsetWidth,
+                     window.innerHeight / stage.offsetHeight);
+  stage.style.transform = 'scale(' + s + ')';
+}
+window.addEventListener('resize', fitStage);
+window.addEventListener('load', fitStage);
+fitStage();
 
 const W = canvas.width, H = canvas.height;
 
@@ -32,10 +64,17 @@ const enemyImg = new Image();
 enemyImg.src = 'pngegg.png';
 
 // === STAV HRY ===
-let score, lives, state;
+let score, lives, state, best;
 let player, bullets, enemyBullets, enemies, particles;
 let enemyDir, enemySpeed, enemyMoveTimer, enemyDropping;
-let keys, spacePressed; 
+let keys, spacePressed;
+
+best = +localStorage.getItem('sko_invaders_best') || 0;
+bestEl.textContent = best;
+
+function saveBest(){
+  if (score > best){ best = score; bestEl.textContent = best; localStorage.setItem('sko_invaders_best', best); }
+}
 
 function initLevel() {
   enemyDir = 1;
@@ -45,10 +84,9 @@ function initLevel() {
   enemyBullets = [];
   particles = [];
 
-  // Vytvoření nepřátel — 5 řad x 10 sloupců (celkem 50)
   enemies = [];
   const rows = 5, cols = 10;
-  const startX = 60, startY = 40, spacingX = 52, spacingY = 44; 
+  const startX = 60, startY = 40, spacingX = 52, spacingY = 44;
   for (let r=0; r<rows; r++) {
     for (let c=0; c<cols; c++) {
       enemies.push({
@@ -67,9 +105,9 @@ function init() {
   score = 0; lives = 3;
   scoreEl.textContent = 0;
   livesEl.textContent = 3;
-  player = { x: W/2, y: H-70, w: 52, h: 44, speed: 2.5 }; 
+  player = { x: W/2, y: H-70, w: 52, h: 44, speed: 2.5 };
   keys = {};
-  spacePressed = false; 
+  spacePressed = false;
   initLevel();
   state = 'idle';
 }
@@ -78,15 +116,15 @@ function init() {
 document.addEventListener('keydown', e => {
   keys[e.key] = true;
   if ([' ','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
-  
+  if (e.key === 'Escape') { location.href = '../index.html'; return; }
+
   if (e.key===' ') {
     if (state==='idle'||state==='dead'||state==='gameover'||state==='win') {
       if (state==='gameover') { init(); state='playing'; }
-      else if (state==='win') { init(); state='playing'; } 
+      else if (state==='win') { init(); state='playing'; }
       else if (state==='dead') { state='playing'; }
       else state='playing';
-      
-      spacePressed = true; 
+      spacePressed = true;
     } else if (state==='playing') {
       if (bullets.length === 0 && !spacePressed) {
         bullets.push({ x:player.x, y:player.y-player.h/2, w:4, h:14, speed:6 });
@@ -96,9 +134,9 @@ document.addEventListener('keydown', e => {
   }
 });
 
-document.addEventListener('keyup', e => { 
-  keys[e.key]=false; 
-  if (e.key === ' ') spacePressed = false; 
+document.addEventListener('keyup', e => {
+  keys[e.key]=false;
+  if (e.key === ' ') spacePressed = false;
 });
 
 // === ČÁSTICE (VÝBUCHY) ===
@@ -128,39 +166,29 @@ function drawParticles() {
 
 // === AKTUALIZACE LOGIKY ===
 function update(dt) {
-  // Kontrola výhry hned na začátku
   const aliveEnemies = enemies.filter(e=>e.alive);
-  if (!aliveEnemies.length) { state='win'; return; }
+  if (!aliveEnemies.length) { saveBest(); state='win'; return; }
 
-  // Pohyb hráče
   if (keys['ArrowLeft']||keys['a']) player.x = Math.max(player.w/2, player.x - player.speed);
   if (keys['ArrowRight']||keys['d']) player.x = Math.min(W-player.w/2, player.x + player.speed);
 
-  // Pohyb střel hráče
   bullets = bullets.filter(b => b.y > -20);
   for (const b of bullets) b.y -= b.speed;
 
-  // Pohyb nepřátelských střel
   enemyBullets = enemyBullets.filter(b => b.y < H+20);
   for (const b of enemyBullets) b.y += b.speed;
 
-  // === KLASICKÁ SPACE INVADERS AKCELERACE ===
-  const totalEnemies = 50; 
+  const totalEnemies = 50;
   const aliveCount = aliveEnemies.length;
-  // Základní rychlost 
   enemySpeed = 0.15 + ((totalEnemies - aliveCount) * 0.025);
-  // Pokud zbývá úplně poslední nepřítel, dostane masivní zrychlení
-  if (aliveCount === 1) enemySpeed += 0.75; 
+  if (aliveCount === 1) enemySpeed += 0.75;
 
-  // Časovač pohybu nepřátel
   enemyMoveTimer += enemySpeed;
   const step = 2;
-  
-  // Smyčka 'while' zabraňuje ztrátě posunu při extrémních rychlostech
+
   while (enemyMoveTimer >= 1) {
-    enemyMoveTimer -= 1; 
-    
-    // Kontrola hranic obrazovky
+    enemyMoveTimer -= 1;
+
     const leftmost  = Math.min(...aliveEnemies.map(e=>e.x));
     const rightmost = Math.max(...aliveEnemies.map(e=>e.x));
 
@@ -168,7 +196,7 @@ function update(dt) {
       for (const e of aliveEnemies) e.x += step * enemyDir;
       if (rightmost + step*enemyDir > W-30 || leftmost + step*enemyDir < 30) {
         enemyDir *= -1;
-        enemyDropping = true; // Další krok bude posun dolů
+        enemyDropping = true;
       }
     } else {
       for (const e of aliveEnemies) e.y += 14;
@@ -176,43 +204,38 @@ function update(dt) {
     }
   }
 
-  // Animace nepřátel (zrychluje se vizuálně společně s jejich rychlostí pohybu)
   for (const e of enemies) e.anim += 0.04 * (enemySpeed * 2);
 
-  // Náhodná střelba nepřátel
   if (Math.random() < 0.005) {
     if (aliveEnemies.length) {
       const shooter = aliveEnemies[Math.floor(Math.random()*aliveEnemies.length)];
-      enemyBullets.push({ x:shooter.x, y:shooter.y+shooter.h/2, speed:3 }); 
+      enemyBullets.push({ x:shooter.x, y:shooter.y+shooter.h/2, speed:3 });
     }
   }
 
-  // Detekce kolize: Střela hráče vs. Nepřítel
   for (const b of bullets) {
     for (const e of enemies) {
       if (!e.alive) continue;
       if (Math.abs(b.x-e.x)<e.w/2 && Math.abs(b.y-e.y)<e.h/2) {
         e.alive=false; b.y=-999;
         const pts = [30,20,20,15,10][e.row]||10;
-        score += pts; scoreEl.textContent=score;
-        spawnParticles(e.x,e.y,['#ff4466','#ff8800','#44ff88','#aa44ff','#00ccff'][e.row],10);
+        score += pts; scoreEl.textContent=score; saveBest();
+        spawnParticles(e.x,e.y,['#ff4466','#ff8800','#2fc56f','#62e29a','#b8f5da'][e.row],10);
       }
     }
   }
 
-  // Detekce kolize: Střela nepřítele vs. Hráč
   for (const b of enemyBullets) {
     if (Math.abs(b.x-player.x)<player.w/2-4 && Math.abs(b.y-player.y)<player.h/2-4) {
       b.y=H+99; lives--; livesEl.textContent=lives;
-      spawnParticles(player.x,player.y,'#00aaff',16);
-      if (lives<=0) state='gameover';
+      spawnParticles(player.x,player.y,'#2fc56f',16);
+      if (lives<=0) { saveBest(); state='gameover'; }
       else state='dead';
     }
   }
 
-  // Kontrola, zda nepřítel dosáhl spodní hrany (prohra)
   for (const e of enemies) {
-    if (e.alive && e.y > H-80) { state='gameover'; return; }
+    if (e.alive && e.y > H-80) { saveBest(); state='gameover'; return; }
   }
 
   updateParticles();
@@ -229,29 +252,25 @@ function drawStars() {
 
 function drawPlayer() {
   const p = player;
-  
-  // Vykreslení modré trysky pod lodí
   ctx.save();
-  ctx.shadowColor='#00aaff'; ctx.shadowBlur=12;
-  ctx.fillStyle='#00aaff';
+  ctx.shadowColor='#2fc56f'; ctx.shadowBlur=12;
+  ctx.fillStyle='#2fc56f';
   ctx.beginPath();
-  ctx.moveTo(p.x-8, p.y+p.h/2 - 2); 
+  ctx.moveTo(p.x-8, p.y+p.h/2 - 2);
   ctx.lineTo(p.x+8, p.y+p.h/2 - 2);
   ctx.lineTo(p.x, p.y+p.h/2+8+Math.random()*6);
   ctx.closePath(); ctx.fill();
   ctx.restore();
 
-  // Vykreslení samotné lodě (hlavy)
   if (playerImg.complete && playerImg.naturalWidth !== 0) {
     ctx.drawImage(playerImg, p.x - p.w/2, p.y - p.h/2, p.w, p.h);
   } else {
-    ctx.fillStyle='#00aaff';
+    ctx.fillStyle='#2fc56f';
     ctx.fillRect(p.x-p.w/2,p.y-p.h/2,p.w,p.h);
   }
 }
 
 function drawBullets() {
-  // Střely hráče
   for (const b of bullets) {
     ctx.save();
     ctx.shadowColor='#ffff00'; ctx.shadowBlur=8;
@@ -259,7 +278,6 @@ function drawBullets() {
     ctx.fillRect(b.x-b.w/2, b.y, b.w, b.h);
     ctx.restore();
   }
-  // Střely nepřátel
   for (const b of enemyBullets) {
     ctx.save();
     ctx.shadowColor='#ff4400'; ctx.shadowBlur=8;
@@ -282,44 +300,44 @@ function drawEnemies() {
 }
 
 function drawGround() {
-  ctx.fillStyle='#1a3a6a';
+  ctx.fillStyle='#0d4631';
   ctx.fillRect(0, H-30, W, 30);
-  ctx.fillStyle='#2a5aaa';
+  ctx.fillStyle='#2fc56f';
   ctx.fillRect(0, H-30, W, 2);
 }
 
 function drawOverlay() {
-  ctx.fillStyle='rgba(10,14,26,0.85)';
+  ctx.fillStyle='rgba(3,16,10,0.85)';
   ctx.fillRect(0,0,W,H);
   ctx.textAlign='center';
   const cx=W/2, cy=H/2;
   if (state==='idle') {
-    ctx.fillStyle='#00ccff'; ctx.font='bold 36px sans-serif';
+    ctx.fillStyle='#2fc56f'; ctx.font='900 38px Trebuchet MS, sans-serif';
     ctx.fillText('ŠkoInvaders',cx,cy-40);
-    ctx.fillStyle='#aaa'; ctx.font='17px sans-serif';
+    ctx.fillStyle='#cdeede'; ctx.font='17px sans-serif';
     ctx.fillText('← → nebo A D pro pohyb',cx,cy+4);
     ctx.fillText('Mezerník = střelba',cx,cy+28);
     ctx.fillStyle='#ffff44'; ctx.font='bold 16px sans-serif';
     ctx.fillText('Mezerník pro start',cx,cy+60);
   } else if (state==='dead') {
-    ctx.fillStyle='#ff4444'; ctx.font='bold 28px sans-serif';
+    ctx.fillStyle='#ff6a6a'; ctx.font='bold 28px sans-serif';
     ctx.fillText('Ztratil jsi život!',cx,cy-20);
-    ctx.fillStyle='#aaa'; ctx.font='16px sans-serif';
+    ctx.fillStyle='#cdeede'; ctx.font='16px sans-serif';
     ctx.fillText('Životy: '+lives+'   |   Mezerník pro pokračování',cx,cy+16);
   } else if (state==='gameover') {
-    ctx.fillStyle='#ff4444'; ctx.font='bold 36px sans-serif';
+    ctx.fillStyle='#ff6a6a'; ctx.font='900 38px Trebuchet MS, sans-serif';
     ctx.fillText('KONEC HRY',cx,cy-36);
-    ctx.fillStyle='#aaa'; ctx.font='18px sans-serif';
-    ctx.fillText('Skóre: '+score,cx,cy+8);
+    ctx.fillStyle='#cdeede'; ctx.font='18px sans-serif';
+    ctx.fillText('Skóre: '+score+'   Nejlepší: '+best,cx,cy+8);
     ctx.fillStyle='#ffff44'; ctx.font='bold 16px sans-serif';
     ctx.fillText('Mezerník pro restart',cx,cy+40);
   } else if (state==='win') {
-    ctx.fillStyle='#00ff88'; ctx.font='bold 34px sans-serif';
+    ctx.fillStyle='#2fc56f'; ctx.font='900 36px Trebuchet MS, sans-serif';
     ctx.fillText('VÍTĚZSTVÍ! 🎉',cx,cy-36);
-    ctx.fillStyle='#aaa'; ctx.font='18px sans-serif';
-    ctx.fillText('Skóre: '+score,cx,cy+8);
+    ctx.fillStyle='#cdeede'; ctx.font='18px sans-serif';
+    ctx.fillText('Skóre: '+score+'   Nejlepší: '+best,cx,cy+8);
     ctx.fillStyle='#ffff44'; ctx.font='bold 16px sans-serif';
-    ctx.fillText('Mezerník pro restart',cx,cy+40); 
+    ctx.fillText('Mezerník pro restart',cx,cy+40);
   }
 }
 
@@ -328,7 +346,7 @@ let last=0;
 function loop(ts) {
   requestAnimationFrame(loop);
   const dt = Math.min((ts-last)/16.67,3); last=ts;
-  ctx.fillStyle='#0a0e1a'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#07140d'; ctx.fillRect(0,0,W,H);
   drawStars();
   drawGround();
   if (state==='playing') update(dt);

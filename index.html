@@ -7,86 +7,49 @@
 <style>
   @font-face{ font-family:'PixelArcade'; src:url('assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
   :root{
-    --bg:#092725; --bg2:#0b302c; --panel:#0c302c; --line:#1d4a44;
+    --bg:#092725; --line:#1d4a44;
     --sage:#7e9a90; --sage2:#a9c4ba; --teal:#34625b;
     --white:#ffffff; --gold:#f5c518;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{height:100%;}
   body{
-    background:
-      radial-gradient(120% 80% at 50% -8%, #0f3a35 0%, var(--bg) 52%, #061b19 100%);
+    background:var(--bg);
     color:var(--white);
     font-family:'PixelArcade','Courier New',monospace;
     overflow:hidden; height:100vh; user-select:none; cursor:default;
   }
-
-  /* synthwave podlaha */
-  .floor{
-    position:fixed; left:-25%; right:-25%; bottom:0; height:46vh; z-index:0;
-    background:
-      repeating-linear-gradient(to right, rgba(126,154,144,.16) 0 2px, transparent 2px 84px),
-      repeating-linear-gradient(to bottom, rgba(126,154,144,.16) 0 2px, transparent 2px 84px);
-    transform:perspective(420px) rotateX(62deg); transform-origin:bottom center;
-    -webkit-mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,.4) 40%, transparent 78%);
-            mask-image:linear-gradient(to top, #000 0%, rgba(0,0,0,.4) 40%, transparent 78%);
-    pointer-events:none;
-  }
-  #fx{position:fixed;inset:0;z-index:1;pointer-events:none;}
-
+  #fx{position:fixed;inset:0;z-index:0;pointer-events:none;}
   /* CRT */
-  .crt::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:40;
-    background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.14) 3px,rgba(0,0,0,0) 4px);}
-  .crt::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:41;
-    box-shadow:inset 0 0 200px 60px rgba(0,0,0,.55);
-    background:radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,.32) 100%);}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:40;
+    background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.12) 3px,rgba(0,0,0,0) 4px);}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:41;
+    background:radial-gradient(ellipse at 50% 42%, transparent 56%, rgba(0,0,0,.45) 100%);}
 
   #screen{position:fixed;inset:0;z-index:3;display:flex;flex-direction:column;}
-  .main{flex:1;display:flex;align-items:center;gap:clamp(16px,3vw,54px);
-        padding:clamp(10px,2.4vh,30px) clamp(18px,3.5vw,60px) 0;min-height:0;}
 
-  /* ===== LEVÝ PANEL: MASKOT ===== */
-  #left{
-    flex:0 0 clamp(230px,30%,430px);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:clamp(8px,2vh,22px);align-self:stretch;
-  }
-  .logo{height:clamp(40px,8.5vh,92px);width:auto;}
-  .mascot-wrap{position:relative;display:flex;align-items:flex-end;justify-content:center;
-    flex:1;min-height:0;width:100%;}
-  .spot{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);
-    width:120%;height:120%;
-    background:radial-gradient(ellipse at center, rgba(169,196,186,.22), rgba(126,154,144,.06) 45%, transparent 68%);
-    filter:blur(2px);}
-  .mascot{position:relative;z-index:2;height:auto;width:auto;
-    max-height:clamp(190px,46vh,460px);max-width:100%;
-    filter:drop-shadow(0 18px 14px rgba(0,0,0,.5));
-    animation:bob 3.4s ease-in-out infinite;}
-  @keyframes bob{50%{transform:translateY(-10px);}}
-  .pedestal{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);
-    width:62%;height:18px;border-radius:50%;
-    background:radial-gradient(ellipse at center, rgba(169,196,186,.45), rgba(52,98,91,.18) 55%, transparent 72%);
-    z-index:1;}
-  .start{font-size:clamp(11px,1.7vw,18px);color:var(--white);letter-spacing:3px;
-    text-shadow:0 0 12px rgba(169,196,186,.5);animation:blink 1.05s steps(1) infinite;}
-  @keyframes blink{50%{opacity:0;}}
+  /* topbar s logem */
+  .topbar{padding:clamp(14px,3vh,34px) clamp(24px,4vw,64px) 0;}
+  .logo{height:clamp(58px,12vh,128px);width:auto;display:block;}
 
-  /* ===== PRAVÝ PANEL: HRY ===== */
-  #right{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;
-    gap:clamp(10px,2.2vh,26px);align-self:center;max-height:100%;}
+  .main{flex:1;display:flex;align-items:center;gap:clamp(18px,3vw,56px);
+        padding:clamp(6px,1.6vh,20px) clamp(24px,4vw,64px);min-height:0;}
+
+  /* ===== HRY (vlevo) ===== */
+  #games{flex:1.75;min-width:0;display:flex;flex-direction:column;
+    justify-content:center;gap:clamp(12px,2.6vh,30px);}
   .cat-head{display:flex;align-items:center;gap:10px;
-    font-size:clamp(9px,1.5vw,15px);color:var(--sage2);letter-spacing:3px;
-    margin-bottom:clamp(7px,1.2vh,12px);text-shadow:0 0 10px rgba(169,196,186,.3);}
+    font-size:clamp(9px,1.4vw,15px);color:var(--sage2);letter-spacing:3px;
+    margin-bottom:clamp(8px,1.3vh,13px);}
   .cat-head::before{content:"";width:13px;height:13px;flex:0 0 auto;
     background:linear-gradient(135deg,var(--sage2),var(--teal));clip-path:polygon(0 0,100% 0,70% 100%,0 100%);}
-  .cat-head::after{content:"";flex:1;height:2px;
-    background:linear-gradient(90deg,var(--line),transparent);}
+  .cat-head::after{content:"";flex:1;height:2px;background:linear-gradient(90deg,var(--line),transparent);}
 
-  .row{display:flex;flex-wrap:wrap;gap:clamp(10px,1.4vw,22px);}
-  .two{display:flex;flex-wrap:wrap;gap:clamp(16px,3vw,48px);}
-  .col{flex:1;min-width:190px;max-width:560px;}
+  .row{display:flex;flex-wrap:wrap;gap:clamp(10px,1.3vw,22px);}
+  .two{display:flex;flex-wrap:wrap;gap:clamp(16px,2.6vw,44px);}
+  .col{flex:1;min-width:180px;max-width:540px;}
 
-  .card{width:clamp(116px,12.5vw,178px);display:flex;flex-direction:column;
+  .card{width:clamp(108px,11.5vw,172px);display:flex;flex-direction:column;
     cursor:pointer;transition:transform .14s;}
   .frame{width:100%;aspect-ratio:4/3;position:relative;border-radius:11px;overflow:hidden;
     border:3px solid var(--line);background:#06201d;
@@ -94,71 +57,82 @@
   .frame svg{display:block;width:100%;height:100%;}
   .frame::after{content:"";position:absolute;inset:0;pointer-events:none;
     background:
-      radial-gradient(130% 70% at 50% -12%, rgba(255,255,255,.12), transparent 58%),
+      radial-gradient(130% 70% at 50% -12%, rgba(255,255,255,.10), transparent 58%),
       repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.15) 3px,rgba(0,0,0,0) 4px);}
-  .cap{margin-top:9px;font-size:clamp(7px,.95vw,11px);color:var(--sage);letter-spacing:1px;line-height:1.5;}
-  .genre{margin-top:5px;font-size:clamp(6px,.8vw,8px);color:var(--teal);letter-spacing:1px;}
-  .hi{margin-top:4px;font-size:clamp(6px,.8vw,8px);color:#3c5a52;letter-spacing:1px;}
+  .cap{margin-top:9px;font-size:clamp(7px,.9vw,11px);color:var(--sage);letter-spacing:1px;line-height:1.5;}
+  .genre{margin-top:5px;font-size:clamp(6px,.78vw,8px);color:var(--teal);letter-spacing:1px;}
+  .hi{margin-top:4px;font-size:clamp(6px,.78vw,8px);color:#3c5a52;letter-spacing:1px;}
 
   .card.sel{transform:translateY(-7px) scale(1.05);}
   .card.sel .frame{border-color:var(--sage2);
-    box-shadow:inset 0 0 0 2px var(--bg),0 0 26px rgba(169,196,186,.6),0 8px 18px rgba(0,0,0,.5);}
-  .card.sel .cap{color:var(--sage2);text-shadow:0 0 8px rgba(169,196,186,.6);}
+    box-shadow:inset 0 0 0 2px var(--bg),0 0 26px rgba(169,196,186,.55),0 8px 18px rgba(0,0,0,.5);}
+  .card.sel .cap{color:var(--sage2);}
   .card.sel .hi{color:var(--gold);}
   .card.sel .frame::before{content:"\25B6 PLAY";position:absolute;z-index:3;left:50%;bottom:8px;
     transform:translateX(-50%);background:var(--sage2);color:var(--bg);
-    font-size:clamp(7px,.95vw,10px);padding:4px 9px;border-radius:4px;letter-spacing:1px;
+    font-size:clamp(7px,.9vw,10px);padding:4px 9px;border-radius:4px;letter-spacing:1px;
     animation:blink .5s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
 
   .card.soon{cursor:not-allowed;}
   .card.soon .frame{filter:saturate(.5) brightness(.78);}
   .card.soon .frame::before{content:"SOON";position:absolute;z-index:3;inset:0;
     display:flex;align-items:center;justify-content:center;
-    font-size:clamp(15px,2.4vw,30px);color:var(--white);letter-spacing:4px;
+    font-size:clamp(14px,2.2vw,28px);color:var(--white);letter-spacing:4px;
     text-shadow:0 0 12px rgba(0,0,0,.9),2px 2px 0 var(--teal);background:rgba(6,32,29,.32);}
   .ribbon{position:absolute;z-index:4;top:9px;right:-28px;transform:rotate(45deg);
-    background:var(--gold);color:var(--bg);font-size:clamp(6px,.85vw,9px);
+    background:var(--gold);color:var(--bg);font-size:clamp(6px,.8vw,9px);
     letter-spacing:2px;padding:3px 32px;box-shadow:0 2px 6px rgba(0,0,0,.4);}
+
+  /* ===== MASKOT (vpravo) ===== */
+  #hero{flex:1;min-width:0;align-self:stretch;position:relative;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+    padding-bottom:clamp(6px,2vh,22px);}
+  .spot{position:absolute;left:50%;top:50%;transform:translate(-50%,-54%);
+    width:96%;height:88%;
+    background:radial-gradient(ellipse at center, rgba(169,196,186,.20), rgba(126,154,144,.05) 46%, transparent 70%);
+    filter:blur(3px);pointer-events:none;}
+  .mascot{position:relative;z-index:2;width:auto;
+    max-height:clamp(220px,56vh,560px);max-width:96%;
+    filter:drop-shadow(0 20px 16px rgba(0,0,0,.5));
+    animation:bob 3.4s ease-in-out infinite;}
+  @keyframes bob{50%{transform:translateY(-12px);}}
+  .pedestal{position:relative;z-index:1;margin-top:-6px;
+    width:46%;height:18px;border-radius:50%;
+    background:radial-gradient(ellipse at center, rgba(169,196,186,.4), rgba(52,98,91,.16) 55%, transparent 72%);}
+  .start{position:relative;z-index:2;margin-top:clamp(8px,1.6vh,16px);
+    font-size:clamp(12px,1.8vw,20px);color:var(--white);letter-spacing:3px;
+    animation:blink 1.05s steps(1) infinite;}
 
   /* ===== PATIČKA ===== */
   .foot{z-index:3;display:flex;flex-direction:column;gap:6px;align-items:center;
-    padding:clamp(6px,1.4vh,16px) 12px clamp(8px,2vh,20px);}
+    padding:0 12px clamp(10px,2.2vh,22px);}
   .hint{font-size:clamp(6px,1vw,10px);color:var(--teal);letter-spacing:1px;}
   .credit{font-size:clamp(6px,1vw,9px);color:#24514a;letter-spacing:1px;}
 
   /* ===== PORTRÉT / ÚZKÁ OBRAZOVKA ===== */
   @media (max-aspect-ratio:1/1), (max-width:820px){
-    .main{flex-direction:column;gap:clamp(10px,2vh,20px);overflow-y:auto;padding-top:14px;}
-    #left{flex:0 0 auto;flex-direction:row;gap:18px;align-self:center;}
-    .mascot-wrap{flex:0 0 auto;}
-    .mascot{max-height:clamp(120px,20vh,200px);}
-    .logo{height:clamp(36px,5vh,64px);}
+    .main{flex-direction:column-reverse;gap:clamp(8px,2vh,18px);overflow-y:auto;}
+    #hero{flex:0 0 auto;align-self:center;}
+    .mascot{max-height:clamp(120px,22vh,210px);}
     .start{display:none;}
-    #right{align-self:stretch;}
+    .topbar{display:flex;justify-content:center;}
     .row{justify-content:center;}
   }
 </style>
 </head>
-<body class="crt">
-  <div class="floor"></div>
+<body>
   <canvas id="fx"></canvas>
 
   <div id="screen">
-    <div class="main">
-      <!-- MASKOT -->
-      <div id="left">
-        <img class="logo" src="assets/logo.png" alt="ŠkoPilot Family">
-        <div class="mascot-wrap">
-          <div class="spot"></div>
-          <img class="mascot" src="assets/skopilot.png"
-               onerror="this.onerror=null;this.src='invaders/skopilotHead.png'" alt="ŠkoPilot">
-          <div class="pedestal"></div>
-        </div>
-        <div class="start">PUSH START</div>
-      </div>
+    <div class="topbar">
+      <img class="logo" src="assets/logo_t.png"
+           onerror="this.onerror=null;this.src='assets/logo.png'" alt="ŠkoPilot Family">
+    </div>
 
+    <div class="main">
       <!-- HRY -->
-      <div id="right">
+      <div id="games">
         <div>
           <div class="cat-head">ŠKOPILOT</div>
           <div class="row" id="row-games"></div>
@@ -173,6 +147,15 @@
             <div class="row" id="row-pro"></div>
           </div>
         </div>
+      </div>
+
+      <!-- MASKOT -->
+      <div id="hero">
+        <div class="spot"></div>
+        <img class="mascot" src="assets/skopilot.png"
+             onerror="this.onerror=null;this.src='invaders/skopilotHead.png'" alt="ŠkoPilot">
+        <div class="pedestal"></div>
+        <div class="start">PUSH START</div>
       </div>
     </div>
 
@@ -304,9 +287,9 @@
   function resizeFx(){
     fx.width=window.innerWidth; fx.height=window.innerHeight;
     parts=[];
-    const n=Math.round(fx.width/26);
+    const n=Math.round(fx.width/30);
     for(let i=0;i<n;i++) parts.push({x:Math.random()*fx.width,y:Math.random()*fx.height,
-      s:Math.random()<.2?2:1, v:0.15+Math.random()*0.5, a:0.2+Math.random()*0.5});
+      s:Math.random()<.2?2:1, v:0.12+Math.random()*0.45, a:0.15+Math.random()*0.4});
   }
   window.addEventListener('resize', resizeFx); resizeFx();
   (function fxLoop(){
@@ -314,7 +297,7 @@
     fc.clearRect(0,0,fx.width,fx.height);
     for(const p of parts){
       p.y-=p.v; if(p.y<-4){ p.y=fx.height+4; p.x=Math.random()*fx.width; }
-      fc.globalAlpha=p.a; fc.fillStyle=p.s===2?'#a9c4ba':'#3c6e63';
+      fc.globalAlpha=p.a; fc.fillStyle=p.s===2?'#a9c4ba':'#356057';
       fc.fillRect(p.x|0,p.y|0,p.s,p.s);
     }
     fc.globalAlpha=1;

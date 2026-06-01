@@ -8,9 +8,9 @@ Vše je čisté HTML/JS/Canvas — žádný build, žádné závislosti. Stačí
 
 Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený do kategorií:
 
-- **ŠkoPilot** — hratelné hry (níže v tabulce)
+- **ŠkoPilot** — *Flappy ŠkoPilot*
 - **ŠkoPilot Clip** — *ClipTris* (Tetris) — zatím jen náhled „SOON"
-- **ŠkoPilot Pro** — zatím „SOON"
+- **ŠkoPilot Pro** — *Agent Builder* (plošinovka) — hratelné
 
 ## Co je uvnitř
 
@@ -18,14 +18,19 @@ Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený d
 |-------|-----|------|----------|
 | `index.html` | **Arcade launcher** | retro výběr her | šipky + Enter / myš |
 | `flappy/` | **Flappy ŠkoPilot** | letová obratnost | Mezerník / klik = skok |
-| `invaders/` | **ŠkoInvaders** | vesmírná střílečka | ← → + Mezerník |
-| `snake/` | **ŠkoSnake** | sbírání mincí | šipky / WASD |
-| `breakout/` | **ŠkoBreakout** | arkanoid s pádlem | ← → + Mezerník |
-| `skoman/` | **ŠkoMan** | bludiště à la Pac-Man | šipky / WASD |
+| `pro/` | **ŠkoPilot Pro** | plošinovka, stavba agenta | šipky/joystick + skok, **X** = výstřel |
+
+### ŠkoPilot Pro — Agent Builder
+V mladoboleslavském cloudu spadly moduly. ŠkoPilot probíhá 3 levely (IT&Dev →
+Výroba → HR), sbírá ztracené **tooly** a na konci levelu z nich u „šasi"
+sestaví **AI Agenta**. Má časový limit (**Server Timeout**), bugy (nepřátele),
+power‑upy (☕ zrychlení, 🛡 firewall) a arkádovou **síň slávy** se zadáváním
+3 písmen jména. Rozlišení 4:3 (800×600), škáluje se na celou obrazovku.
+Mapování kláves je nahoře v souboru v `KEYMAP` (Input Manager) — snadno upravíš
+pro svůj USB enkodér.
 
 Všechny hry:
 - jdou **přes celou obrazovku** (automaticky se přizpůsobí poměru displeje),
-- mají barvy maskota (smaragdová `#2fc56f`, tmavě zelené tělo `#0d4631`, bílá hlava),
 - **ESC** kdykoliv vrátí do menu, vlevo nahoře je i tlačítko **◀ MENU**,
 - ukládají nejlepší skóre do prohlížeče (`localStorage`).
 
@@ -37,7 +42,7 @@ Všechny hry:
 assets/skopilot.png      (nejlépe PNG s průhledným pozadím, na výšku ~500–800 px)
 ```
 
-Když soubor chybí, vše automaticky použije hlavu `invaders/skopilotHead.png`,
+Když soubor chybí, vše automaticky použije hlavu `assets/skopilotHead.png`,
 takže nic nespadne.
 
 > Úvodní obrazovka je v **8-bit retro** stylu (hvězdné pole, CRT scanlines,

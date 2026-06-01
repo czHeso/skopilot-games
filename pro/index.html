@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ŠkoPilot Pro — Agent Builder</title>
+  <style>
+    @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    html,body{height:100%;}
+    body{background:#02100c;display:flex;align-items:center;justify-content:center;height:100vh;
+      overflow:hidden;font-family:'PixelArcade','Courier New',monospace;color:#eef6f4;user-select:none;}
+    body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);}
+    #stage{transform-origin:center center;}
+    canvas{display:block;background:#06201d;border:2px solid #1c4a35;border-radius:6px;
+      box-shadow:0 0 34px rgba(47,197,111,.22);image-rendering:pixelated;}
+    #menuBtn{position:fixed;top:14px;left:14px;z-index:60;background:#0c2418;color:#b8f5da;
+      border:1px solid #235c41;border-radius:8px;padding:8px 14px;font-size:12px;letter-spacing:1px;
+      cursor:pointer;font-family:inherit;}
+    #menuBtn:hover{background:#11331f;}
+  </style>
+</head>
+<body>
+  <button id="menuBtn" onclick="location.href='../index.html'">◀ MENU</button>
+  <div id="stage"><canvas id="c" width="800" height="600"></canvas></div>
+<script>
+/* ===================== INPUT MANAGER (config) ===================== */
+/* Arcade1Up bývá mapovaný jako USB klávesnice. Uprav podle svého enkodéru. */
+const KEYMAP = {
+  left:  ['ArrowLeft','a','A'],
+  right: ['ArrowRight','d','D'],
+  up:    ['ArrowUp','w','W'],
+  down:  ['ArrowDown','s','S'],
+  jump:  [' ','z','Z','ArrowUp','w','W','Control'],   // tlačítko A / páčka nahoru
+  shoot: ['x','X','Alt','Shift'],                      // tlačítko B
+  start: ['Enter',' '],
+  menu:  ['Escape'],
+};
+const action = {}; const justAction = {};
+function setActions(key,val,track){
+  for(const a in KEYMAP){ if(KEYMAP[a].includes(key)){ if(val && !action[a] && track) justAction[a]=true; action[a]=val; } }
+}
+addEventListener('keydown',e=>{
+  if(KEYMAP.menu.includes(e.key)){ location.href='../index.html'; return; }
+  if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+  setActions(e.key,true,true);
+});
+addEventListener('keyup',e=>setActions(e.key,false,false));
+function consume(a){ if(justAction[a]){ justAction[a]=false; return true; } return false; }
+
+/* ===================== SETUP ===================== */
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const stage=document.getElementById('stage');
+const W=canvas.width, H=canvas.height;
+function fit(){ const s=Math.min(innerWidth/stage.offsetWidth, innerHeight/stage.offsetHeight); stage.style.transform='scale('+s+')'; }
+addEventListener('resize',fit); addEventListener('load',fit); fit();
+
+const headImg=new Image(); headImg.src='../assets/skopilotHead.png';
+
+/* ===================== CONSTANTS ===================== */
+const GRAV=0.62, MAXV=13, SPEED=3.3, JUMP=-13.2, STEP=1000/60;
+const PLAYER_W=30, PLAYER_H=38;
+
+/* ===================== LEVELS ===================== */
+function baseGround(){ return {x:0,y:560,w:800,h:40}; }
+const LEVELS=[
+  { name:'1. IT & DEV', accent:'#2fc56f', wall:'#0d4631', time:60, agent:'CODER AGENT',
+    platforms:[ baseGround(),
+      {x:90,y:452,w:170,h:18},{x:340,y:392,w:150,h:18},{x:560,y:322,w:180,h:18},
+      {x:120,y:262,w:150,h:18},{x:380,y:200,w:170,h:18} ],
+    tools:[ {x:150,y:420,label:'.py'},{x:610,y:290,label:'API'},{x:430,y:168,label:'<>'} ],
+    enemies:[ {x:300,y:524,minX:200,maxX:520,vx:1.4,kind:'syntax'},
+              {x:380,y:356,minX:345,maxX:470,vx:1.1,kind:'legacy'} ],
+    powerups:[ {x:200,y:230,type:'coffee'} ],
+    chassis:{x:445,y:146} },
+
+  { name:'2. FACTORY', accent:'#ffd23f', wall:'#5a4a12', time:55, agent:'FACTORY OPTIMIZER',
+    platforms:[ baseGround(),
+      {x:60,y:470,w:140,h:18},{x:280,y:420,w:150,h:18},{x:500,y:380,w:150,h:18},
+      {x:300,y:280,w:200,h:18},{x:600,y:230,w:150,h:18} ],
+    tools:[ {x:110,y:438,label:'SNS'},{x:560,y:348,label:'AI'},{x:660,y:198,label:'PRD'} ],
+    enemies:[ {x:300,y:524,minX:120,maxX:640,vx:1.8,kind:'arm'},
+              {x:340,y:244,minX:305,maxX:480,vx:1.3,kind:'delay'},
+              {x:540,y:344,minX:505,maxX:640,vx:1.5,kind:'arm'} ],
+    powerups:[ {x:360,y:248,type:'firewall'} ],
+    chassis:{x:355,y:226} },
+
+  { name:'3. HR OFFICE', accent:'#62e29a', wall:'#234a44', time:55, agent:'HR HELPER',
+    platforms:[ baseGround(),
+      {x:120,y:470,w:150,h:18},{x:360,y:430,w:140,h:18},{x:150,y:350,w:150,h:18},
+      {x:420,y:320,w:170,h:18},{x:620,y:260,w:140,h:18} ],
+    tools:[ {x:180,y:438,label:'PDF'},{x:470,y:288,label:'='},{x:670,y:228,label:'TXT'} ],
+    enemies:[ {x:300,y:524,minX:120,maxX:660,vx:1.6,kind:'email'},
+              {x:170,y:314,minX:155,maxX:280,vx:1.2,kind:'paper'},
+              {x:450,y:284,minX:425,maxX:570,vx:1.7,kind:'email'} ],
+    powerups:[ {x:640,y:228,type:'coffee'} ],
+    chassis:{x:660,y:206} },
+];
+
+/* ===================== STATE ===================== */
+let state, tick, score, lives, levelIdx, lvl, timeLeft;
+let player, tools, enemies, powerups, chassis, shots, particles;
+let shootCd, invuln, speedBoost, firewall, clearTimer;
+let best=+localStorage.getItem('sko_pro_best')||0;
+
+function loadScores(){ try{ return JSON.parse(localStorage.getItem('sko_pro_scores'))||[]; }catch(e){ return []; } }
+function saveScores(s){ localStorage.setItem('sko_pro_scores', JSON.stringify(s)); }
+let scores=loadScores();
+if(scores.length===0){ scores=[{n:'SKO',s:3000},{n:'PIL',s:2000},{n:'OT0',s:1200},{n:'AAA',s:600},{n:'BUG',s:200}]; saveScores(scores); }
+
+function loadLevel(i){
+  lvl=LEVELS[i];
+  timeLeft=lvl.time;
+  player={x:60,y:500,w:PLAYER_W,h:PLAYER_H,vx:0,vy:0,onGround:false,face:1};
+  tools=lvl.tools.map(t=>({x:t.x,y:t.y,w:22,h:22,label:t.label,got:false}));
+  enemies=lvl.enemies.map(e=>({x:e.x,y:e.y,w:30,h:26,minX:e.minX,maxX:e.maxX,vx:e.vx,kind:e.kind,alive:true}));
+  powerups=lvl.powerups.map(p=>({x:p.x,y:p.y,w:24,h:24,type:p.type,got:false}));
+  chassis={x:lvl.chassis.x,y:lvl.chassis.y,w:50,h:58};
+  shots=[]; particles=[];
+  shootCd=0; invuln=0; speedBoost=0; firewall=0;
+}
+
+function startGame(){ score=0; lives=3; levelIdx=0; loadLevel(0); state='play'; }
+function initTitle(){ state='title'; tick=0; }
+
+/* ===================== HELPERS ===================== */
+function aabb(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
+function burst(x,y,col,n=10){ for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2,sp=1+Math.random()*3.5;
+  particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1,life:1,col}); } }
+
+function toolsLeft(){ return tools.filter(t=>!t.got).length; }
+
+/* ===================== UPDATE ===================== */
+function update(){
+  tick++;
+  if(state==='title'){ if(consume('start')) startGame(); return; }
+  if(state==='clear'){ clearTimer--; for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life-=0.02;}
+    particles=particles.filter(p=>p.life>0);
+    if(clearTimer<=0){ levelIdx++; if(levelIdx>=LEVELS.length){ victory(); } else { loadLevel(levelIdx); state='play'; } } return; }
+  if(state==='gameover'){ if(consume('start')) maybeEnterScore(); return; }
+  if(state==='enter'){ updateEnter(); return; }
+  if(state==='scores'){ if(consume('start')) initTitle(); return; }
+
+  /* ----- PLAY ----- */
+  timeLeft -= STEP/1000;
+  if(timeLeft<=0){ timeLeft=0; return gameOver(); }
+  if(invuln>0) invuln--;
+  if(speedBoost>0) speedBoost--;
+  if(firewall>0) firewall--;
+  if(shootCd>0) shootCd--;
+
+  const spd = SPEED*(speedBoost>0?1.6:1);
+  player.vx=0;
+  if(action.left){ player.vx=-spd; player.face=-1; }
+  if(action.right){ player.vx=spd; player.face=1; }
+  if(consume('jump') && player.onGround){ player.vy=JUMP; player.onGround=false; }
+  // dash (down+shoot nebo Shift): krátký impuls — využijeme shoot tlačítko jen na střelbu, dash na 'down'+jump? necháme jednoduché
+  if(consume('shoot') && shootCd<=0){
+    shots.push({x:player.x+player.w/2,y:player.y+player.h*0.45,vx:player.face*7,w:10,h:5});
+    shootCd=16;
+  }
+
+  // pohyb hráče + kolize
+  const plats=lvl.platforms;
+  player.x+=player.vx;
+  if(player.x<0)player.x=0; if(player.x+player.w>W)player.x=W-player.w;
+  for(const p of plats){ if(aabb(player,p)){ if(player.vx>0)player.x=p.x-player.w; else if(player.vx<0)player.x=p.x+p.w; } }
+  player.vy+=GRAV; if(player.vy>MAXV)player.vy=MAXV;
+  player.y+=player.vy; player.onGround=false;
+  for(const p of plats){ if(aabb(player,p)){ if(player.vy>0){player.y=p.y-player.h;player.onGround=true;} else if(player.vy<0){player.y=p.y+p.h;} player.vy=0; } }
+  if(player.y>H+60){ hit(true); }
+
+  // tooly
+  for(const t of tools){ if(!t.got && aabb(player,t)){ t.got=true; score+=100; burst(t.x+11,t.y+11,'#f5c518',8); } }
+  // powerupy
+  for(const pu of powerups){ if(!pu.got && aabb(player,pu)){ pu.got=true; score+=25; burst(pu.x+12,pu.y+12,'#b8f5da',8);
+    if(pu.type==='coffee') speedBoost=60*6; if(pu.type==='firewall') firewall=60*6; } }
+
+  // střely
+  for(const s of shots){ s.x+=s.vx; }
+  shots=shots.filter(s=>s.x>-20&&s.x<W+20);
+  for(const s of shots){ for(const e of enemies){ if(e.alive && aabb(s,e)){ e.alive=false; s.x=-999; score+=50; burst(e.x+15,e.y+13,'#ff6a6a',10); } } }
+
+  // nepřátelé (bugi)
+  for(const e of enemies){ if(!e.alive)continue; e.x+=e.vx; if(e.x<e.minX){e.x=e.minX;e.vx*=-1;} if(e.x+e.w>e.maxX){e.x=e.maxX-e.w;e.vx*=-1;}
+    if(invuln<=0 && firewall<=0 && aabb(player,e)){ hit(false); } }
+
+  // chassis -> level clear
+  if(toolsLeft()===0 && aabb(player,chassis)){ levelClear(); }
+
+  // částice
+  for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life-=0.03;}
+  particles=particles.filter(p=>p.life>0);
+}
+
+function hit(fell){
+  lives--; invuln=60*1.5;
+  burst(player.x+player.w/2,player.y+player.h/2,'#ff6a6a',14);
+  player.x=60; player.y=500; player.vx=0; player.vy=0;
+  if(lives<=0) gameOver();
+}
+
+function levelClear(){
+  score += Math.floor(timeLeft)*10 + 300;   // časový bonus + stavba agenta
+  if(score>best){ best=score; localStorage.setItem('sko_pro_best',best); }
+  burst(chassis.x+25,chassis.y+20,lvl.accent,26);
+  state='clear'; clearTimer=80;   // ~1.3 s mezi-levelová animace
+}
+function victory(){ state='gameover'; victoryFlag=true; }
+let victoryFlag=false;
+
+function gameOver(){
+  if(score>best){ best=score; localStorage.setItem('sko_pro_best',best); }
+  state='gameover';
+}
+
+/* ----- HIGH SCORE ENTRY ----- */
+let entryName, entryPos;
+function maybeEnterScore(){
+  const min = scores.length<5 ? -1 : scores[scores.length-1].s;
+  if(score>min){ entryName=['A','A','A']; entryPos=0; state='enter'; }
+  else state='scores';
+}
+function updateEnter(){
+  if(consume('up')){ entryName[entryPos]=String.fromCharCode((entryName[entryPos].charCodeAt(0)-65+1)%26+65); }
+  if(consume('down')){ entryName[entryPos]=String.fromCharCode((entryName[entryPos].charCodeAt(0)-65+25)%26+65); }
+  if(consume('right')){ entryPos=(entryPos+1)%3; }
+  if(consume('left')){ entryPos=(entryPos+2)%3; }
+  if(consume('shoot')||consume('start')){
+    scores.push({n:entryName.join(''),s:score});
+    scores.sort((a,b)=>b.s-a.s); scores=scores.slice(0,5); saveScores(scores);
+    state='scores';
+  }
+}
+
+/* ===================== RENDER ===================== */
+function rr(x,y,w,h,r){ ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath(); }
+
+function drawBgGrid(){
+  ctx.fillStyle='#06201d'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(47,197,111,0.06)'; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+}
+
+function drawPlatform(p){
+  ctx.fillStyle=lvl.wall; rr(p.x,p.y,p.w,p.h,5); ctx.fill();
+  ctx.fillStyle=lvl.accent; ctx.fillRect(p.x,p.y,p.w,3);
+}
+
+function drawTool(t){
+  if(t.got) return;
+  ctx.save(); ctx.translate(t.x+11,t.y+11+Math.sin((tick+t.x)/18)*3);
+  ctx.shadowColor='#f5c518'; ctx.shadowBlur=10;
+  ctx.fillStyle='#f5c518'; rr(-11,-11,22,22,5); ctx.fill();
+  ctx.shadowBlur=0; ctx.fillStyle='#1a1300'; ctx.font='bold 9px PixelArcade, monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t.label,0,1);
+  ctx.restore();
+}
+
+function drawPowerup(pu){
+  if(pu.got) return;
+  const y=pu.y+Math.sin((tick+pu.x)/16)*3;
+  ctx.save(); ctx.shadowColor=pu.type==='coffee'?'#ffae42':'#62e29a'; ctx.shadowBlur=12;
+  ctx.fillStyle=pu.type==='coffee'?'#7a3b10':'#0e3a52'; rr(pu.x,y,pu.w,pu.h,6); ctx.fill();
+  ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.font='12px PixelArcade, monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(pu.type==='coffee'?'☕':'🛡',pu.x+pu.w/2,y+pu.h/2+1);
+  ctx.restore();
+}
+
+function drawChassis(){
+  const active=toolsLeft()===0, x=chassis.x,y=chassis.y;
+  ctx.save();
+  if(active){ ctx.shadowColor=lvl.accent; ctx.shadowBlur=18; }
+  ctx.strokeStyle=active?lvl.accent:'#3c5a52'; ctx.lineWidth=2; ctx.setLineDash(active?[]:[5,4]);
+  rr(x+6,y+18,38,34,6); ctx.stroke();          // tělo
+  ctx.beginPath(); ctx.arc(x+25,y+12,11,0,Math.PI*2); ctx.stroke();  // hlava
+  ctx.setLineDash([]); ctx.restore();
+  ctx.fillStyle=active?lvl.accent:'#3c5a52'; ctx.font='8px PixelArcade, monospace'; ctx.textAlign='center';
+  ctx.fillText(active?'BUILD!':'AGENT', x+25, y+64);
+}
+
+function drawPlayer(){
+  if(invuln>0 && Math.floor(tick/4)%2===0) return; // blik
+  const p=player;
+  // tělo
+  ctx.fillStyle = firewall>0 ? '#2a6cff' : '#137a47';
+  rr(p.x+5,p.y+16,p.w-10,p.h-16,5); ctx.fill();
+  if(firewall>0){ ctx.strokeStyle='#9ec4ff'; ctx.lineWidth=2; rr(p.x+2,p.y+2,p.w-4,p.h-4,6); ctx.stroke(); }
+  // hlava
+  if(headImg.complete && headImg.naturalWidth){ ctx.drawImage(headImg,p.x+1,p.y-2,p.w-2,p.w-2); }
+  else { ctx.fillStyle='#eef6f4'; ctx.beginPath(); ctx.arc(p.x+p.w/2,p.y+10,11,0,Math.PI*2); ctx.fill(); }
+}
+
+function drawEnemy(e){
+  if(!e.alive)return;
+  ctx.fillStyle='#ff5d5d';
+  rr(e.x,e.y,e.w,e.h,8); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(e.x+9,e.y+11,3,0,7); ctx.arc(e.x+21,e.y+11,3,0,7); ctx.fill();
+  ctx.fillStyle='#3a0000'; ctx.beginPath(); ctx.arc(e.x+9,e.y+11,1.3,0,7); ctx.arc(e.x+21,e.y+11,1.3,0,7); ctx.fill();
+  // nožičky
+  ctx.strokeStyle='#ff5d5d'; ctx.lineWidth=2;
+  for(const dx of [4,15,26]){ ctx.beginPath(); ctx.moveTo(e.x+dx,e.y+e.h); ctx.lineTo(e.x+dx-2,e.y+e.h+5); ctx.stroke(); }
+}
+
+function drawShots(){ for(const s of shots){ ctx.save(); ctx.shadowColor='#b8f5da';ctx.shadowBlur=8;
+  ctx.fillStyle='#eaffff'; rr(s.x-5,s.y-2,10,5,2); ctx.fill(); ctx.restore(); } }
+
+function drawParticles(){ for(const p of particles){ ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.col;
+  ctx.fillRect(p.x|0,p.y|0,3,3);} ctx.globalAlpha=1; }
+
+function drawHUD(){
+  ctx.fillStyle='rgba(2,16,11,.7)'; ctx.fillRect(0,0,W,30);
+  ctx.fillStyle='#eef6f4'; ctx.font='11px PixelArcade, monospace'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText('SCORE '+String(score).padStart(6,'0'),10,15);
+  ctx.fillStyle=lvl.accent; ctx.textAlign='center'; ctx.fillText(lvl.name,W/2,15);
+  // tooly
+  ctx.textAlign='right'; ctx.fillStyle='#f5c518';
+  ctx.fillText('TOOLS '+(tools.length-toolsLeft())+'/'+tools.length, W-10,15);
+  // životy
+  ctx.textAlign='left'; ctx.fillStyle='#ff6a6a';
+  for(let i=0;i<lives;i++) ctx.fillText('♥', 200+i*16, 15);
+  // server timeout bar
+  const bw=200, bx=W/2-bw/2, by=24;
+  ctx.fillStyle='#0d2c1d'; ctx.fillRect(bx,by,bw,4);
+  ctx.fillStyle=timeLeft<10?'#ff5d5d':lvl.accent; ctx.fillRect(bx,by,bw*(timeLeft/lvl.time),4);
+  // powerup ikonky
+  let px=200+lives*16+14;
+  if(speedBoost>0){ ctx.fillStyle='#ffae42'; ctx.fillText('☕',px,15); px+=18; }
+  if(firewall>0){ ctx.fillStyle='#62e29a'; ctx.fillText('🛡',px,15); }
+}
+
+function center(t,y,col,size){ ctx.fillStyle=col; ctx.font=size+'px PixelArcade, monospace'; ctx.textAlign='center'; ctx.fillText(t,W/2,y); }
+
+function drawTitle(){
+  drawBgGrid();
+  if(headImg.complete) ctx.drawImage(headImg, W/2-40, 70, 80, 80);
+  center('ŠKOPILOT PRO', 210, '#2fc56f', 30);
+  center('AGENT BUILDER', 242, '#62e29a', 13);
+  ctx.fillStyle='#bcd'; ctx.font='10px PixelArcade, monospace'; ctx.textAlign='center';
+  const story=['V mladoboleslavskem cloudu spadly moduly!','Probehni servery, sber ztracene TOOLY','a na konci levelu sestav AI Agenta.'];
+  story.forEach((s,i)=>ctx.fillText(s, W/2, 300+i*26));
+  ctx.fillStyle='#8aa'; ctx.fillText('JOY = MOVE/JUMP  ·  X = SHOOT BUG  ·  SPACE = JUMP', W/2, 410);
+  if(Math.floor(tick/30)%2===0) center('PUSH START', 470, '#ffff44', 18);
+  // mini hi-score
+  ctx.fillStyle='#3c5a52'; ctx.font='9px PixelArcade, monospace';
+  ctx.fillText('BEST '+String(best).padStart(6,'0'), W/2, 520);
+}
+
+function drawClear(){
+  drawScene();
+  ctx.fillStyle='rgba(2,16,11,.7)'; ctx.fillRect(0,0,W,H);
+  drawParticles();
+  center('AGENT BUILT!', H/2-30, lvl.accent, 26);
+  center(lvl.agent, H/2+10, '#fff', 16);
+}
+
+function drawGameOver(){
+  drawBgGrid();
+  if(victoryFlag){ center('ALL AGENTS RESTORED!', 220, '#2fc56f', 24); center('SKOPILOT SAVED THE CLOUD', 256,'#62e29a',12); }
+  else center('SERVER CRASH', 220, '#ff5d5d', 30);
+  center('GAME OVER', 262, '#fff', 16);
+  center('SCORE  '+String(score).padStart(6,'0'), 330, '#f5c518', 16);
+  if(Math.floor(tick/30)%2===0) center('PUSH START', 410, '#ffff44', 16);
+}
+
+function drawEnter(){
+  drawBgGrid();
+  center('NEW HIGH SCORE!', 150, '#f5c518', 22);
+  center('SCORE  '+String(score).padStart(6,'0'), 188, '#fff', 13);
+  center('ENTER YOUR INITIALS', 250, '#62e29a', 12);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(let i=0;i<3;i++){
+    const x=W/2-60+i*60;
+    ctx.fillStyle = i===entryPos ? '#2fc56f' : '#0d4631';
+    rr(x-22,310,44,54,6); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='30px PixelArcade, monospace'; ctx.fillText(entryName[i],x,338);
+    if(i===entryPos && Math.floor(tick/20)%2===0){ ctx.fillStyle='#ffff44'; ctx.font='12px PixelArcade, monospace';
+      ctx.fillText('▲',x,296); ctx.fillText('▼',x,378); }
+  }
+  ctx.fillStyle='#8aa'; ctx.font='9px PixelArcade, monospace';
+  ctx.fillText('JOY UP/DOWN = LETTER · LEFT/RIGHT = MOVE · X/START = OK', W/2, 430);
+}
+
+function drawScores(){
+  drawBgGrid();
+  center('HALL OF FAME', 110, '#2fc56f', 24);
+  ctx.font='16px PixelArcade, monospace'; ctx.textBaseline='middle';
+  scores.forEach((e,i)=>{
+    const y=190+i*48;
+    ctx.textAlign='center'; ctx.fillStyle=i===0?'#f5c518':'#cdeede';
+    ctx.fillText((i+1)+'.   '+e.n+'   '+String(e.s).padStart(6,'0'), W/2, y);
+  });
+  if(Math.floor(tick/30)%2===0) center('PUSH START', 520, '#ffff44', 14);
+}
+
+function drawScene(){
+  drawBgGrid();
+  for(const p of lvl.platforms) drawPlatform(p);
+  drawChassis();
+  for(const t of tools) drawTool(t);
+  for(const pu of powerups) drawPowerup(pu);
+  for(const e of enemies) drawEnemy(e);
+  drawShots();
+  drawPlayer();
+  drawParticles();
+  drawHUD();
+  if(toolsLeft()===0){ ctx.fillStyle=lvl.accent; ctx.font='10px PixelArcade, monospace'; ctx.textAlign='center';
+    if(Math.floor(tick/20)%2===0) ctx.fillText('→ BRING TO CHASSIS!', chassis.x+25, chassis.y-10); }
+}
+
+/* ===================== LOOP ===================== */
+let acc=0,lastTs=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(!lastTs)lastTs=ts; acc+=Math.min(ts-lastTs,100); lastTs=ts;
+  while(acc>=STEP){ acc-=STEP; update(); }
+  if(state==='title') drawTitle();
+  else if(state==='play') drawScene();
+  else if(state==='clear') drawClear();
+  else if(state==='gameover') drawGameOver();
+  else if(state==='enter') drawEnter();
+  else if(state==='scores') drawScores();
+}
+loadLevel(0);        // ať lvl existuje pro případné kreslení
+initTitle();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

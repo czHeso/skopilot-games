@@ -26,7 +26,7 @@ Dole je předem napsané slovo **CLIP** pixel grafikou — každá buňka jiný
 **odstín žluté**. Cílem je nápis **co nejrychleji zničit**: padají tetromina a
 když spojíš celý řádek, zmizí (klasicky jako Tetris) a s ním i kousek nápisu.
 Občas (**fakt malá šance**) spadne místo dílu **bomba**, která vybuchne a zničí
-**2×2** kolem dopadu. V bočním panelu vidíš **další padající díl**, aktuální
+**3×3** kolem dopadu. V bočním panelu vidíš **další padající díl**, aktuální
 **čas** a **síň slávy nejrychlejších časů** (čím méně, tím líp). Ovládání je
 nahoře v souboru přehledně v `keydown` — snadno upravíš pro USB enkodér.
 

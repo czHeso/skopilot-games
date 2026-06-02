@@ -231,16 +231,28 @@
   }
 
   // ====== pieces ======
+  // highest occupied row (= number of empty rows above the stack); ROWS if empty
+  function highestRow(){
+    for (let r = 0; r < ROWS; r++){ if (grid[r].some(c => c)) return r; }
+    return ROWS;
+  }
   // how dangerously high the stack is above the CLIP base: 0 (calm) .. 1 (near top)
   function stackPressure(){
-    let top = ROWS;
-    for (let r = 0; r < ROWS; r++){ if (grid[r].some(c => c)){ top = r; break; } }
     const base = ROWS - CLIP_ART.length;            // top of the CLIP sign
-    return Math.min(1, Math.max(0, base - top) / base);
+    return Math.min(1, Math.max(0, base - highestRow()) / base);
   }
 
+  const DANGER_FREE  = 3;   // <= 3 empty rows left -> DANGER warning
+  const ALLBOMB_FREE = 2;   // <= 2 empty rows left -> every piece is a bomb
+
   function makePiece(){
-    // the fuller the well, the more bombs — a safety valve so it stays beatable
+    const free = highestRow();
+    // last two rows: every piece a bomb to bail the player out
+    if (free <= ALLBOMB_FREE){
+      bombTimer = 0;
+      return { type:'BOMB', mat:[[1]], color:'#11110f', r:0, c:0 };
+    }
+    // otherwise the fuller the well, the more bombs — a safety valve
     const p = stackPressure();
     const interval = BOMB_INTERVAL - p * (BOMB_INTERVAL - 5000);   // 13s -> 5s when nearly full
     const chance   = BOMB_CHANCE + p * (0.34 - BOMB_CHANCE);        // 12% -> ~1 in 3 when nearly full
@@ -332,15 +344,12 @@
   }
 
   function explode(r, c){
-    // the bomb destroys a 2x2 area around the landing spot (clamped to the field)
-    let r0 = r, c0 = c;
-    if (c0 + 1 >= COLS) c0 = COLS - 2;
-    if (r0 + 1 >= ROWS) r0 = ROWS - 2;
-    if (c0 < 0) c0 = 0;
-    if (r0 < 0) r0 = 0;
-    for (let dr = 0; dr < 2; dr++)
-      for (let dc = 0; dc < 2; dc++)
-        removeCell(r0 + dr, c0 + dc);
+    // the bomb destroys a 3x3 area centred on the landing spot
+    for (let dr = -1; dr <= 1; dr++)
+      for (let dc = -1; dc <= 1; dc++){
+        const rr = r + dr, cc = c + dc;
+        if (rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS) removeCell(rr, cc);
+      }
     flash = 1;
   }
 
@@ -535,8 +544,8 @@
       ctx.fillRect(0, 0, board.width, board.height);
     }
 
-    // DANGER — blinking border + label when the stack runs high
-    if (state === 'playing' && stackPressure() > 0.55){
+    // DANGER — blinking border + label when only the last few rows are free
+    if (state === 'playing' && highestRow() <= DANGER_FREE){
       const blink = Math.floor(tick/8) % 2 === 0;
       if (blink){
         ctx.fillStyle = 'rgba(255,60,60,.12)'; ctx.fillRect(0, 0, board.width, board.height);

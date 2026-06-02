@@ -106,13 +106,22 @@
     .mascot{max-height:clamp(190px,42vh,400px);}
     .logo{height:clamp(50px,9vh,104px);}
   }
-  /* portrét */
-  @media (max-aspect-ratio:1/1), (max-width:820px){
+  /* portrait monitor (na výšku) — maskot zůstává VEDLE her, ne nad nimi */
+  @media (max-aspect-ratio:1/1){
+    .main{gap:clamp(10px,2.5vw,28px);}
+    #games{flex:1.25;}
+    #hero{flex:1;}
+    .mascot{max-height:clamp(220px,40vh,600px);}
+    .logo{height:clamp(48px,7vh,100px);}
+    .topbar{display:flex;justify-content:center;}
+    .card{width:clamp(120px,20vw,210px);}
+  }
+  /* velmi úzké displeje (telefon) — teprve tady skládej pod sebe */
+  @media (max-width:600px){
     .main{flex-direction:column-reverse;gap:clamp(8px,2vh,18px);overflow-y:auto;}
     #hero{flex:0 0 auto;align-self:center;}
     .mascot{max-height:clamp(120px,22vh,210px);}
     .start{display:none;}
-    .topbar{display:flex;justify-content:center;}
     .row{justify-content:center;}
   }
 </style>

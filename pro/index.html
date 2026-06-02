@@ -255,9 +255,9 @@ function drawLevelBg(){
 }
 function bgIT(){
   for(const rx of [30,150,610,720]){
-    ctx.fillStyle='#0c2230'; ctx.fillRect(rx,120,86,438);          // až k podlaze (558)
-    ctx.strokeStyle='#16384a'; ctx.lineWidth=2; ctx.strokeRect(rx,120,86,438);
-    for(let i=0;i<11;i++){ const y=128+i*39;
+    ctx.fillStyle='#0c2230'; ctx.fillRect(rx,110,86,410);
+    ctx.strokeStyle='#16384a'; ctx.lineWidth=2; ctx.strokeRect(rx,110,86,410);
+    for(let i=0;i<10;i++){ const y=120+i*39;
       ctx.fillStyle='#0a2a38'; ctx.fillRect(rx+6,y,74,28);
       for(let k=0;k<3;k++){ const on=(((tick>>3)+i+k+rx)%4)===0;
         ctx.fillStyle=on?'#3dffa0':'#0f5b46'; ctx.fillRect(rx+10+k*9,y+6,5,5); }
@@ -270,9 +270,10 @@ function bgIT(){
 function bgFactory(){
   for(let x=-40;x<W;x+=40){ ctx.fillStyle=(((x/40)|0)%2)?'#3a2e08':'#241c05';
     ctx.beginPath();ctx.moveTo(x,70);ctx.lineTo(x+20,70);ctx.lineTo(x+40,86);ctx.lineTo(x+20,86);ctx.closePath();ctx.fill(); }
-  drawRoboArm(690,86);
-  // Škoda auta ZAPARKOVANÁ NA PODLAZE (ŠkoPilot stojí vedle nich)
-  drawCar(360,553,'#2fc56f'); drawCar(560,553,'#9fb4d6'); drawCar(700,553,'#d0d6dc');
+  ctx.strokeStyle='#4a3c10'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(0,160); ctx.lineTo(W,160); ctx.stroke();
+  const cols=['#2fc56f','#9fb4d6','#d0d6dc'];
+  for(let i=0;i<3;i++){ let x=((i*300 - tick*0.7)%(W+160)); if(x<-160) x+=W+160; drawCar(x,160,cols[i]); }
+  drawRoboArm(700,90);
 }
 function drawCar(x,y,col){
   ctx.fillStyle=col; rr(x,y-15,72,15,5); ctx.fill();
@@ -285,22 +286,21 @@ function drawCar(x,y,col){
 function drawRoboArm(x,y){
   const sw=Math.sin(tick/45)*22;
   ctx.strokeStyle='#7a6a28'; ctx.lineWidth=8; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-46,y+120); ctx.lineTo(x-14+sw,y+220); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-46,y+58); ctx.lineTo(x-14+sw,y+118); ctx.stroke();
   ctx.lineCap='butt';
   ctx.fillStyle='#b59a3a'; ctx.fillRect(x-10,y-12,20,16);
-  ctx.fillStyle='#caa64a'; ctx.fillRect(x-22+sw,y+218,16,8);
+  ctx.fillStyle='#caa64a'; ctx.fillRect(x-22+sw,y+116,16,8);
 }
 function bgHR(){
-  ctx.fillStyle='#1d3a46'; ctx.fillRect(520,70,210,150);          // okno (na stěně)
+  ctx.fillStyle='#1d3a46'; ctx.fillRect(520,70,210,150);
   ctx.strokeStyle='#2c5566'; ctx.lineWidth=2;
   for(let i=1;i<8;i++){ ctx.beginPath(); ctx.moveTo(520,70+i*19); ctx.lineTo(730,70+i*19); ctx.stroke(); }
   ctx.strokeStyle='#3c6678'; ctx.strokeRect(520,70,210,150);
-  // stoly + HR lidi STOJÍCÍ NA PODLAZE (vedle ŠkoPilota)
-  drawPerson(160,520,'#62e29a'); drawDesk(120,490);
-  drawPerson(600,520,'#9fb4d6'); drawDesk(560,490);
-  drawPlant(40,530);
+  drawDesk(120,250); drawPerson(150,196,'#62e29a');
+  drawDesk(330,250); drawPerson(360,196,'#9fb4d6');
+  drawPlant(60,520);
   ctx.fillStyle='rgba(238,246,244,0.14)';
-  for(let i=0;i<5;i++){ const x=((i*170 + tick*0.5)%W), y=110+((i*47)%60); ctx.fillRect(x,y,14,18); }
+  for(let i=0;i<6;i++){ const x=((i*150 + tick*0.5)%W), y=110+((i*47)%70); ctx.fillRect(x,y,14,18); }
 }
 function drawDesk(x,y){
   ctx.fillStyle='#3a2a1a'; ctx.fillRect(x,y+34,120,10);

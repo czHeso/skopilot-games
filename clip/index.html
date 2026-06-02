@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ŠkoPilot Clip</title>
+  <style>
+    @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
+    :root{
+      --bg:#092725; --line:#1d4a44;
+      --sage:#7e9a90; --sage2:#a9c4ba; --teal:#34625b;
+      --white:#ffffff; --gold:#f5c518;
+    }
+    *{ margin:0; padding:0; box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      background:var(--bg); color:var(--white);
+      display:flex; align-items:center; justify-content:center;
+      height:100vh; overflow:hidden; user-select:none;
+      font-family:'PixelArcade','Courier New',monospace;
+    }
+    /* CRT scanlines + vignette */
+    body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:50;
+      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.14) 3px,rgba(0,0,0,0) 4px); }
+    body::before{ content:""; position:fixed; inset:0; pointer-events:none; z-index:49;
+      background:radial-gradient(ellipse at 50% 44%, transparent 58%, rgba(0,0,0,.5) 100%); }
+
+    #menuBtn{
+      position:fixed; top:14px; left:14px; z-index:60;
+      background:#0c2418; color:#b8f5da; border:1px solid #235c41;
+      border-radius:8px; padding:8px 14px; font-size:12px; letter-spacing:1px;
+      cursor:pointer; font-family:inherit;
+    }
+    #menuBtn:hover{ background:#11331f; }
+
+    #stage{ transform-origin:center center; position:relative; display:flex; gap:26px; align-items:flex-start; }
+
+    #well{ position:relative; }
+    canvas#board{ display:block; border:3px solid var(--line); border-radius:10px;
+      background:#06201d; box-shadow:0 0 28px rgba(245,197,24,.10), inset 0 0 0 2px #06201d; }
+
+    /* boční panel */
+    #side{ width:160px; display:flex; flex-direction:column; gap:16px; padding-top:4px; }
+    .panel{ border:2px solid var(--line); border-radius:9px; background:#08231f;
+      padding:10px 12px; }
+    .panel .lab{ font-size:8px; letter-spacing:2px; color:var(--sage); margin-bottom:8px; }
+    .big{ font-size:20px; color:var(--white); letter-spacing:1px; }
+    .gold{ color:var(--gold); }
+    #nextWrap{ display:flex; justify-content:center; }
+    canvas#next{ display:block; }
+    #clipLeft{ font-size:20px; color:var(--gold); letter-spacing:1px; }
+    .top li{ list-style:none; font-size:9px; color:var(--sage2); letter-spacing:1px;
+      display:flex; justify-content:space-between; margin:5px 0; }
+    .top li b{ color:var(--gold); font-weight:normal; }
+    .hint{ font-size:7px; line-height:1.7; color:var(--teal); letter-spacing:1px; }
+  </style>
+</head>
+<body>
+  <button id="menuBtn" onclick="location.href='../index.html'">◀ MENU</button>
+  <div id="stage">
+    <div id="well">
+      <canvas id="board" width="330" height="440"></canvas>
+    </div>
+    <div id="side">
+      <div class="panel">
+        <div class="lab">NEXT</div>
+        <div id="nextWrap"><canvas id="next" width="120" height="80"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="lab">TIME</div>
+        <div class="big" id="time">0.00</div>
+      </div>
+      <div class="panel">
+        <div class="lab">BEST TIME</div>
+        <div class="big gold" id="best">—</div>
+      </div>
+      <div class="panel">
+        <div class="lab">CLIP LEFT</div>
+        <div id="clipLeft">0</div>
+      </div>
+      <div class="panel">
+        <div class="lab">FASTEST</div>
+        <ul class="top" id="topList"></ul>
+      </div>
+      <div class="hint">
+        &larr; &rarr; MOVE<br>
+        &uarr; / X ROTATE<br>
+        &darr; SOFT DROP<br>
+        SPACE HARD DROP<br>
+        ESC MENU
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ====== rozměry hřiště ======
+  const COLS = 15, ROWS = 20, CELL = 22;
+  const board = document.getElementById('board');
+  const ctx = board.getContext('2d');
+  const nextC = document.getElementById('next');
+  const nctx = nextC.getContext('2d');
+  const stage = document.getElementById('stage');
+
+  const timeEl = document.getElementById('time');
+  const bestEl = document.getElementById('best');
+  const clipLeftEl = document.getElementById('clipLeft');
+  const topListEl = document.getElementById('topList');
+
+  // ====== škálování na celou obrazovku (arcade) ======
+  function fitStage(){
+    const s = Math.min(window.innerWidth  / stage.offsetWidth,
+                       window.innerHeight / stage.offsetHeight) * 0.96;
+    stage.style.transform = 'scale(' + s + ')';
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('load', fitStage);
+
+  // ====== nápis CLIP (pixel grafika) ve spodních řádcích ======
+  // C(0-2) mezera(3) L(4-6) mezera(7) I(8-10) mezera(11) P(12-14)
+  const CLIP_ART = [
+    "XXX.X...XXX.XXX",
+    "X...X....X..X.X",
+    "X...X....X..XXX",
+    "X...X....X..X..",
+    "XXX.XXX.XXX.X..",
+  ];
+
+  // různé odstíny žluté pro každou buňku nápisu
+  let shadeSeed = 0;
+  function yellowShade(i){
+    const hues = [40,44,48,52,56,38,50,46];
+    const h = hues[i % hues.length];
+    const l = 44 + (i * 9  % 30);   // 44..73 %
+    const s = 92 - (i * 4  % 18);   // 74..92 %
+    return `hsl(${h} ${s}% ${l}%)`;
+  }
+
+  // ====== tetromina (barvy z palety ŠkoPilot — zeleně, ať žlutý CLIP vyniká) ======
+  const SHAPES = {
+    I: [[1,1,1,1]],
+    O: [[1,1],[1,1]],
+    T: [[1,1,1],[0,1,0]],
+    S: [[0,1,1],[1,1,0]],
+    Z: [[1,1,0],[0,1,1]],
+    J: [[1,0,0],[1,1,1]],
+    L: [[0,0,1],[1,1,1]],
+  };
+  const COLORS = {
+    I:'#a9c4ba', O:'#7e9a90', T:'#34625b',
+    S:'#4f8f7e', Z:'#2f6f63', J:'#5b8c82', L:'#3d7a6e',
+  };
+  const BAG = Object.keys(SHAPES);
+  const BOMB_CHANCE = 0.06;      // fakt malá šance
+
+  // ====== stav ======
+  let grid, current, nextPiece, clipRemaining;
+  let state = 'idle';            // idle | playing | dead | enter | scores
+  let startTime = 0, finalCs = 0, liveCs = 0;
+  let dropAcc = 0, lastT = 0;
+  const DROP_INTERVAL = 620;     // ms
+  let tick = 0;
+  let particles = [];
+  let flash = 0;
+
+  let best = +localStorage.getItem('sko_clip_best') || 0;  // centisekundy (0 = žádný)
+
+  // ====== žebříček (nejrychlejší časy) ======
+  function loadScores(){ try { return JSON.parse(localStorage.getItem('sko_clip_scores')) || []; } catch(e){ return []; } }
+  function saveScores(s){ localStorage.setItem('sko_clip_scores', JSON.stringify(s)); }
+  let scores = loadScores();
+  if (scores.length === 0){
+    scores = [{n:'SKO',t:4500},{n:'PIL',t:6000},{n:'OT0',t:8000},{n:'AAA',t:11000},{n:'BUG',t:16000}];
+    saveScores(scores);
+  }
+  let entryName = ['A','A','A'], entryPos = 0;
+
+  function fmt(cs){
+    if (!cs && cs !== 0) return '—';
+    const m = Math.floor(cs / 6000);
+    const s = Math.floor((cs % 6000) / 100);
+    const c = cs % 100;
+    const base = (m > 0 ? m + ':' + String(s).padStart(2,'0') : String(s));
+    return base + '.' + String(c).padStart(2,'0');
+  }
+
+  function refreshSidebar(){
+    bestEl.textContent = best ? fmt(best) : '—';
+    clipLeftEl.textContent = clipRemaining;
+    topListEl.innerHTML = '';
+    scores.slice(0,5).forEach((e,i)=>{
+      const li = document.createElement('li');
+      li.innerHTML = '<span>'+(i+1)+'. '+e.n+'</span><b>'+fmt(e.t)+'</b>';
+      topListEl.appendChild(li);
+    });
+  }
+
+  // ====== sestavení hřiště ======
+  function emptyRow(){ return new Array(COLS).fill(null); }
+
+  function placeClip(){
+    shadeSeed = 0;
+    const startRow = ROWS - CLIP_ART.length;
+    clipRemaining = 0;
+    for (let i = 0; i < CLIP_ART.length; i++){
+      const line = CLIP_ART[i];
+      for (let j = 0; j < COLS; j++){
+        if (line[j] === 'X'){
+          grid[startRow + i][j] = { color: yellowShade(shadeSeed++), clip:true };
+          clipRemaining++;
+        }
+      }
+    }
+  }
+
+  function resetBoard(){
+    grid = [];
+    for (let r = 0; r < ROWS; r++) grid.push(emptyRow());
+    placeClip();
+    particles = [];
+    flash = 0;
+    liveCs = 0; finalCs = 0;
+    nextPiece = makePiece();
+    spawnNext();
+    refreshSidebar();
+    timeEl.textContent = '0.00';
+  }
+
+  // ====== díly ======
+  function makePiece(){
+    if (Math.random() < BOMB_CHANCE){
+      return { type:'BOMB', mat:[[1]], color:'#11110f', r:0, c:0 };
+    }
+    const type = BAG[(Math.random() * BAG.length) | 0];
+    const mat = SHAPES[type].map(row => row.slice());
+    return { type, mat, color: COLORS[type], r:0, c:0 };
+  }
+
+  function spawnNext(){
+    current = nextPiece;
+    current.r = 0;
+    current.c = ((COLS - current.mat[0].length) / 2) | 0;
+    nextPiece = makePiece();
+    drawNext();
+    if (collides(current.mat, current.r, current.c)){
+      state = 'dead';
+    }
+  }
+
+  function collides(mat, r, c){
+    for (let i = 0; i < mat.length; i++){
+      for (let j = 0; j < mat[i].length; j++){
+        if (!mat[i][j]) continue;
+        const rr = r + i, cc = c + j;
+        if (cc < 0 || cc >= COLS || rr >= ROWS) return true;
+        if (rr >= 0 && grid[rr][cc]) return true;
+      }
+    }
+    return false;
+  }
+
+  function rotateCW(m){
+    const rows = m.length, cols = m[0].length;
+    const res = [];
+    for (let c = 0; c < cols; c++){
+      res.push(new Array(rows).fill(0));
+      for (let r = 0; r < rows; r++) res[c][rows - 1 - r] = m[r][c];
+    }
+    return res;
+  }
+
+  function tryRotate(){
+    if (current.type === 'BOMB' || current.type === 'O') return;
+    const nm = rotateCW(current.mat);
+    for (const k of [0, -1, 1, -2, 2]){
+      if (!collides(nm, current.r, current.c + k)){
+        current.mat = nm; current.c += k; return;
+      }
+    }
+  }
+
+  function move(dc){
+    if (!collides(current.mat, current.r, current.c + dc)) current.c += dc;
+  }
+
+  function softDrop(){
+    if (!collides(current.mat, current.r + 1, current.c)){ current.r++; dropAcc = 0; }
+    else lockPiece();
+  }
+
+  function hardDrop(){
+    while (!collides(current.mat, current.r + 1, current.c)) current.r++;
+    lockPiece();
+  }
+
+  // ====== uzamčení / efekty ======
+  function cellCenter(r, c){ return { x:(c + 0.5) * CELL, y:(r + 0.5) * CELL }; }
+
+  function spawnParticles(r, c, color, n){
+    const p = cellCenter(r, c);
+    for (let i = 0; i < n; i++){
+      const a = Math.random() * Math.PI * 2;
+      const sp = 1 + Math.random() * 3.5;
+      particles.push({ x:p.x, y:p.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - 1,
+                       life:1, color });
+    }
+  }
+
+  function removeCell(r, c){
+    const cell = grid[r][c];
+    if (!cell) return;
+    if (cell.clip) clipRemaining--;
+    spawnParticles(r, c, cell.color, cell.clip ? 8 : 4);
+    grid[r][c] = null;
+  }
+
+  function explode(r, c){
+    // bomba zničí 2×2 kolem místa dopadu (zarovnáno do hřiště)
+    let r0 = r, c0 = c;
+    if (c0 + 1 >= COLS) c0 = COLS - 2;
+    if (r0 + 1 >= ROWS) r0 = ROWS - 2;
+    if (c0 < 0) c0 = 0;
+    if (r0 < 0) r0 = 0;
+    for (let dr = 0; dr < 2; dr++)
+      for (let dc = 0; dc < 2; dc++)
+        removeCell(r0 + dr, c0 + dc);
+    flash = 1;
+  }
+
+  function clearLines(){
+    let cleared = 0;
+    for (let r = ROWS - 1; r >= 0; r--){
+      if (grid[r].every(cell => cell !== null)){
+        for (let c = 0; c < COLS; c++){
+          const cell = grid[r][c];
+          if (cell && cell.clip) clipRemaining--;
+          spawnParticles(r, c, cell.color, cell.clip ? 6 : 3);
+        }
+        grid.splice(r, 1);
+        grid.unshift(emptyRow());
+        cleared++;
+        r++; // znovu zkontroluj stejný index
+      }
+    }
+    if (cleared) flash = Math.min(1, 0.4 + cleared * 0.2);
+    return cleared;
+  }
+
+  function lockPiece(){
+    if (current.type === 'BOMB'){
+      explode(current.r, current.c);
+    } else {
+      const m = current.mat;
+      for (let i = 0; i < m.length; i++)
+        for (let j = 0; j < m[i].length; j++)
+          if (m[i][j]){
+            const rr = current.r + i, cc = current.c + j;
+            if (rr >= 0) grid[rr][cc] = { color: current.color, clip:false };
+          }
+      clearLines();
+    }
+
+    if (clipRemaining <= 0){ onWin(); return; }
+    spawnNext();
+  }
+
+  // ====== konec / výhra ======
+  function onWin(){
+    finalCs = liveCs;
+    if (!best || finalCs < best){ best = finalCs; localStorage.setItem('sko_clip_best', best); }
+    const worst = scores.length < 5 ? Infinity : scores[scores.length - 1].t;
+    if (finalCs < worst){
+      entryName = ['A','A','A']; entryPos = 0; state = 'enter';
+    } else {
+      state = 'scores';
+    }
+    refreshSidebar();
+  }
+
+  function confirmName(){
+    scores.push({ n: entryName.join(''), t: finalCs });
+    scores.sort((a,b) => a.t - b.t);
+    scores = scores.slice(0, 5);
+    saveScores(scores);
+    refreshSidebar();
+    state = 'scores';
+  }
+
+  function startGame(){
+    resetBoard();
+    state = 'playing';
+    startTime = performance.now();
+    dropAcc = 0; lastT = startTime;
+  }
+
+  function primary(){
+    if (state === 'idle')   { startGame(); }
+    else if (state === 'dead')   { resetBoard(); state = 'idle'; }
+    else if (state === 'scores') { resetBoard(); state = 'idle'; }
+    else if (state === 'enter')  { confirmName(); }
+  }
+
+  // ====== ovládání ======
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){ location.href = '../index.html'; return; }
+
+    if (state === 'playing'){
+      switch (e.key){
+        case 'ArrowLeft': case 'a': e.preventDefault(); move(-1); break;
+        case 'ArrowRight': case 'd': e.preventDefault(); move(1); break;
+        case 'ArrowDown': case 's': e.preventDefault(); softDrop(); break;
+        case 'ArrowUp': case 'w': case 'x': case 'X': e.preventDefault(); tryRotate(); break;
+        case ' ': e.preventDefault(); hardDrop(); break;
+      }
+      return;
+    }
+
+    if (state === 'enter'){
+      const code = entryName[entryPos].charCodeAt(0) - 65;
+      switch (e.key){
+        case 'ArrowUp': case 'w': e.preventDefault(); entryName[entryPos] = String.fromCharCode((code+1)%26+65); break;
+        case 'ArrowDown': case 's': e.preventDefault(); entryName[entryPos] = String.fromCharCode((code+25)%26+65); break;
+        case 'ArrowRight': case 'd': e.preventDefault(); entryPos = (entryPos+1)%3; break;
+        case 'ArrowLeft': case 'a': e.preventDefault(); entryPos = (entryPos+2)%3; break;
+        case 'Enter': case ' ': case 'x': case 'X': e.preventDefault(); confirmName(); break;
+      }
+      return;
+    }
+
+    if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); primary(); }
+  });
+
+  board.addEventListener('click', () => { if (state !== 'playing' && state !== 'enter') primary(); });
+
+  // ====== vykreslování ======
+  function drawCell(g, px, py, sz, color){
+    g.fillStyle = color; g.fillRect(px, py, sz, sz);
+    g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(px, py, sz, 3); g.fillRect(px, py, 3, sz);
+    g.fillStyle = 'rgba(0,0,0,.30)'; g.fillRect(px, py+sz-3, sz, 3); g.fillRect(px+sz-3, py, 3, sz);
+    g.strokeStyle = 'rgba(0,0,0,.35)'; g.strokeRect(px+0.5, py+0.5, sz-1, sz-1);
+  }
+
+  function drawBomb(g, px, py, sz, t){
+    const cx = px + sz/2, cy = py + sz/2 + 1, r = sz*0.36;
+    g.fillStyle = '#15140f';
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI*2); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 1;
+    g.beginPath(); g.arc(cx - r*0.3, cy - r*0.3, r*0.4, 0, Math.PI*2); g.stroke();
+    // doutnák
+    g.strokeStyle = '#8a6b22'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(cx, cy - r); g.lineTo(cx + sz*0.18, py + 2); g.stroke();
+    const spark = (Math.sin(t*0.4) > 0) ? '#ffd23b' : '#ff7a3b';
+    g.fillStyle = spark;
+    g.beginPath(); g.arc(cx + sz*0.18, py + 2, 2.4, 0, Math.PI*2); g.fill();
+  }
+
+  function drawPieceCell(g, r, c, piece){
+    const px = c * CELL, py = r * CELL;
+    if (py < -CELL) return;
+    if (piece.type === 'BOMB'){
+      g.fillStyle = '#0c0b08'; g.fillRect(px, py, CELL, CELL);
+      g.strokeStyle = 'rgba(0,0,0,.4)'; g.strokeRect(px+0.5, py+0.5, CELL-1, CELL-1);
+      drawBomb(g, px, py, CELL, tick);
+    } else {
+      drawCell(g, px, py, CELL, piece.color);
+    }
+  }
+
+  function ghostRow(){
+    let gr = current.r;
+    while (!collides(current.mat, gr + 1, current.c)) gr++;
+    return gr;
+  }
+
+  function drawBoard(){
+    ctx.clearRect(0, 0, board.width, board.height);
+
+    // jemná mřížka
+    ctx.strokeStyle = 'rgba(255,255,255,.04)';
+    for (let c = 1; c < COLS; c++){ ctx.beginPath(); ctx.moveTo(c*CELL, 0); ctx.lineTo(c*CELL, ROWS*CELL); ctx.stroke(); }
+    for (let r = 1; r < ROWS; r++){ ctx.beginPath(); ctx.moveTo(0, r*CELL); ctx.lineTo(COLS*CELL, r*CELL); ctx.stroke(); }
+
+    // uložené buňky
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (grid[r][c]) drawCell(ctx, c*CELL, r*CELL, CELL, grid[r][c].color);
+
+    // duch + aktivní díl
+    if (state === 'playing' && current){
+      const gr = ghostRow();
+      const m = current.mat;
+      if (current.type !== 'BOMB'){
+        ctx.globalAlpha = 0.18;
+        for (let i = 0; i < m.length; i++)
+          for (let j = 0; j < m[i].length; j++)
+            if (m[i][j] && gr+i >= 0) drawCell(ctx, (current.c+j)*CELL, (gr+i)*CELL, CELL, current.color);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.globalAlpha = 0.22; ctx.fillStyle = '#ffae3b';
+        ctx.fillRect(current.c*CELL+2, gr*CELL+2, CELL-4, CELL-4); ctx.globalAlpha = 1;
+      }
+      for (let i = 0; i < m.length; i++)
+        for (let j = 0; j < m[i].length; j++)
+          if (m[i][j]) drawPieceCell(ctx, current.r+i, current.c+j, current);
+    }
+
+    // částice
+    for (const p of particles){
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x-2, p.y-2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+
+    // záblesk
+    if (flash > 0){
+      ctx.fillStyle = 'rgba(245,197,24,' + (flash*0.25) + ')';
+      ctx.fillRect(0, 0, board.width, board.height);
+    }
+
+    if (state === 'idle')   drawTitle();
+    else if (state === 'dead')   drawGameOver();
+    else if (state === 'enter')  drawEnter();
+    else if (state === 'scores') drawScores();
+  }
+
+  function panel(alpha){ ctx.fillStyle = 'rgba(6,32,29,' + alpha + ')'; ctx.fillRect(0, 0, board.width, board.height); }
+
+  function drawTitle(){
+    panel(0.82);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f5c518'; ctx.font = '18px PixelArcade, monospace';
+    ctx.fillText('ŠKOPILOT', board.width/2, 120);
+    ctx.fillText('CLIP', board.width/2, 150);
+    ctx.fillStyle = '#cdeede'; ctx.font = '8px PixelArcade, monospace';
+    wrapText('ZNIČ NÁPIS CLIP CO NEJRYCHLEJI', board.width/2, 200, 11);
+    wrapText('SPOJUJ CELÉ ŘÁDKY = ZMIZÍ', board.width/2, 226, 11);
+    ctx.fillStyle = '#ffae3b'; ctx.font = '7px PixelArcade, monospace';
+    ctx.fillText('POZOR NA BOMBY!', board.width/2, 262);
+    if (Math.floor(tick/20)%2 === 0){
+      ctx.fillStyle = '#62e29a'; ctx.font = '9px PixelArcade, monospace';
+      ctx.fillText('ENTER / SPACE = START', board.width/2, 320);
+    }
+  }
+
+  function drawGameOver(){
+    panel(0.85);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff6a6a'; ctx.font = '16px PixelArcade, monospace';
+    ctx.fillText('GAME OVER', board.width/2, 170);
+    ctx.fillStyle = '#cdeede'; ctx.font = '8px PixelArcade, monospace';
+    ctx.fillText('ZÁSOBNÍK PŘETEKL', board.width/2, 200);
+    ctx.fillText('CLIP LEFT: ' + clipRemaining, board.width/2, 224);
+    if (Math.floor(tick/20)%2 === 0){
+      ctx.fillStyle = '#62e29a';
+      ctx.fillText('SPACE / CLICK = ZNOVU', board.width/2, 270);
+    }
+  }
+
+  function drawEnter(){
+    panel(0.92);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#f5c518'; ctx.font = '13px PixelArcade, monospace';
+    ctx.fillText('NOVÝ REKORD!', board.width/2, 90);
+    ctx.fillStyle = '#cdeede'; ctx.font = '11px PixelArcade, monospace';
+    ctx.fillText('TIME ' + fmt(finalCs), board.width/2, 120);
+    ctx.fillStyle = '#62e29a'; ctx.font = '8px PixelArcade, monospace';
+    ctx.fillText('ZADEJ INICIÁLY', board.width/2, 160);
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < 3; i++){
+      const x = board.width/2 - 48 + i*48;
+      ctx.fillStyle = i === entryPos ? '#34625b' : '#0d3a33';
+      ctx.fillRect(x-18, 188, 36, 44);
+      ctx.fillStyle = '#fff'; ctx.font = '20px PixelArcade, monospace';
+      ctx.fillText(entryName[i], x, 212);
+      if (i === entryPos && Math.floor(tick/20)%2 === 0){
+        ctx.fillStyle = '#ffd23b'; ctx.font = '10px PixelArcade, monospace';
+        ctx.fillText('▲', x, 174); ctx.fillText('▼', x, 246);
+      }
+    }
+    ctx.fillStyle = '#8aa6a0'; ctx.font = '6px PixelArcade, monospace'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('UP/DOWN MĚNÍ · L/R POSUN · SPACE OK', board.width/2, 290);
+  }
+
+  function drawScores(){
+    panel(0.93);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#f5c518'; ctx.font = '14px PixelArcade, monospace';
+    ctx.fillText('NEJRYCHLEJŠÍ', board.width/2, 70);
+    ctx.font = '11px PixelArcade, monospace';
+    scores.forEach((e, i) => {
+      const y = 120 + i*42;
+      ctx.fillStyle = (i === 0) ? '#f5c518' : '#cdeede';
+      ctx.textAlign = 'left';  ctx.fillText((i+1) + '. ' + e.n, 60, y);
+      ctx.textAlign = 'right'; ctx.fillText(fmt(e.t), board.width - 50, y);
+    });
+    ctx.textAlign = 'center';
+    if (Math.floor(tick/20)%2 === 0){
+      ctx.fillStyle = '#62e29a'; ctx.font = '8px PixelArcade, monospace';
+      ctx.fillText('SPACE / CLICK = HRÁT ZNOVU', board.width/2, board.height - 26);
+    }
+  }
+
+  function wrapText(text, x, y, max){
+    const words = text.split(' ');
+    let line = '', yy = y;
+    for (const w of words){
+      const test = line ? line + ' ' + w : w;
+      if (test.length > max && line){ ctx.fillText(line, x, yy); line = w; yy += 16; }
+      else line = test;
+    }
+    if (line) ctx.fillText(line, x, yy);
+  }
+
+  // ====== náhled dalšího dílu ======
+  function drawNext(){
+    nctx.clearRect(0, 0, nextC.width, nextC.height);
+    const p = nextPiece;
+    const sz = 18;
+    if (p.type === 'BOMB'){
+      const px = (nextC.width - sz)/2, py = (nextC.height - sz)/2;
+      nctx.fillStyle = '#0c0b08'; nctx.fillRect(px, py, sz, sz);
+      drawBomb(nctx, px, py, sz, tick);
+      return;
+    }
+    const m = p.mat;
+    const w = m[0].length * sz, h = m.length * sz;
+    const ox = (nextC.width - w)/2, oy = (nextC.height - h)/2;
+    for (let i = 0; i < m.length; i++)
+      for (let j = 0; j < m[i].length; j++)
+        if (m[i][j]) drawCell(nctx, ox + j*sz, oy + i*sz, sz, p.color);
+  }
+
+  // ====== smyčka ======
+  function loop(now){
+    requestAnimationFrame(loop);
+    tick++;
+
+    if (state === 'playing'){
+      liveCs = Math.floor((now - startTime) / 10);
+      timeEl.textContent = fmt(liveCs);
+
+      dropAcc += now - lastT;
+      if (dropAcc >= DROP_INTERVAL){ dropAcc = 0; softDrop(); }
+    }
+    lastT = now;
+
+    if (state === 'scores' || state === 'enter') timeEl.textContent = fmt(finalCs);
+
+    // částice + záblesk
+    for (const p of particles){ p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life -= 0.03; }
+    particles = particles.filter(p => p.life > 0);
+    if (flash > 0) flash = Math.max(0, flash - 0.05);
+
+    clipLeftEl.textContent = clipRemaining;
+    drawNext();
+    drawBoard();
+  }
+
+  resetBoard();
+  fitStage();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

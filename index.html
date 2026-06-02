@@ -191,10 +191,16 @@
     { head:'ŠKOPILOT', items:[
       { playable:true, title:'FLAPPY ŠKOPILOT', genre:'FLY &amp; DODGE', url:'flappy/index.html', hi:'sko_flappy_best', art:ART.flappy } ] },
     { head:'ŠKOPILOT CLIP', items:[
-      { playable:false, title:'CLIPTRIS', genre:'STACK THE BLOCKS', art:ART.cliptris } ] },
+      { playable:true, title:'ŠKOPILOT CLIP', genre:'CLEAR CLIP &middot; TIME ATTACK', url:'clip/index.html', hi:'sko_clip_best', time:true, art:ART.cliptris } ] },
     { head:'ŠKOPILOT PRO', items:[
       { playable:true, title:'ŠKOPILOT PRO', genre:'AGENT BUILDER', url:'pro/index.html', hi:'sko_pro_best', art:ART.pro } ] },
   ];
+
+  function fmtTime(cs){
+    const m=Math.floor(cs/6000), s=Math.floor((cs%6000)/100), c=cs%100;
+    const base=(m>0? m+':'+String(s).padStart(2,'0') : String(s));
+    return base+'.'+String(c).padStart(2,'0');
+  }
 
   const gamesEl=document.getElementById('games');
   const playables=[];
@@ -206,9 +212,12 @@
       const card=document.createElement('div');
       if(it.playable){
         const hi=localStorage.getItem(it.hi)||0;
+        let hiTxt;
+        if(it.time){ hiTxt = hi ? ('BEST '+fmtTime(+hi)) : 'BEST --'; }
+        else { hiTxt = 'HI '+String(hi).padStart(5,'0'); }
         card.className='card';
         card.innerHTML='<div class="frame">'+it.art+'</div><div class="cap">'+it.title+'</div>'+
-          '<div class="genre">'+it.genre+'</div><div class="hi">HI '+String(hi).padStart(5,'0')+'</div>';
+          '<div class="genre">'+it.genre+'</div><div class="hi">'+hiTxt+'</div>';
         const idx=playables.length;
         playables.push({url:it.url,card});
         card.addEventListener('click',()=>{ sel=idx; render(); launch(); });

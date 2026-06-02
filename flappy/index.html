@@ -40,9 +40,9 @@
 <body>
   <button id="menuBtn" onclick="location.href='../index.html'">◀ MENU</button>
   <div id="stage">
-    <div id="hud">SKÓRE: <span id="score">0</span>&nbsp;&nbsp; NEJLEPŠÍ: <span id="best">0</span>&nbsp;&nbsp; 🪙 <span id="coins">0</span></div>
+    <div id="hud">SCORE: <span id="score">0</span>&nbsp;&nbsp; BEST: <span id="best">0</span>&nbsp;&nbsp; 🪙 <span id="coins">0</span></div>
     <canvas id="canvas" width="580" height="380"></canvas>
-    <div id="hint">Mezerník nebo klik = skok &nbsp;·&nbsp; ESC = menu</div>
+    <div id="hint">SPACE or CLICK = flap &nbsp;·&nbsp; ESC = menu</div>
   </div>
   <script>
     const canvas = document.getElementById('canvas');
@@ -126,9 +126,16 @@
     // Hlava maskota ŠkoPilot
     avatarImg.src = '../assets/skopilotHead.png';
 
-    let ball, pipes, coins, pipeCount, score, best, state, lastPipe;
+    let ball, pipes, coins, pipeCount, score, best, state, lastPipe, tick = 0;
     best = +localStorage.getItem('sko_flappy_best') || 0;
     bestEl.textContent = best;
+
+    // === Hall of Fame (leaderboard) ===
+    function loadScores(){ try { return JSON.parse(localStorage.getItem('sko_flappy_scores')) || []; } catch(e){ return []; } }
+    function saveScores(s){ localStorage.setItem('sko_flappy_scores', JSON.stringify(s)); }
+    let scores = loadScores();
+    if (scores.length === 0){ scores = [{n:'SKO',s:25},{n:'PIL',s:18},{n:'OT0',s:12},{n:'AAA',s:6},{n:'BUG',s:2}]; saveScores(scores); }
+    let entryName = ['A','A','A'], entryPos = 0;
 
     function init() {
       ball = { y: H / 2, vy: 0 };
@@ -154,16 +161,37 @@
       pipes.push({ x: W + 10, topH, gap, scored: false, hasCoin, coinY, coinX: W + 10 + PIPE_W / 2, coinCollected: false });
     }
 
-    function jump() {
-      if (state === 'dead') { init(); return; }
-      if (state === 'idle') state = 'playing';
-      ball.vy = JUMP;
+    function primary() {
+      if (state === 'idle') { state = 'playing'; ball.vy = JUMP; }
+      else if (state === 'playing') { ball.vy = JUMP; }
+      else if (state === 'dead') { afterDeath(); }
+      else if (state === 'enter') { confirmName(); }
+      else if (state === 'scores') { init(); }
+    }
+    function afterDeath() {
+      const min = scores.length < 5 ? -1 : scores[scores.length - 1].s;
+      if (score > min) { entryName = ['A','A','A']; entryPos = 0; state = 'enter'; }
+      else init();
+    }
+    function confirmName() {
+      scores.push({ n: entryName.join(''), s: score });
+      scores.sort((a,b)=>b.s-a.s); scores = scores.slice(0,5); saveScores(scores);
+      state = 'scores';
     }
 
-    canvas.addEventListener('click', jump);
+    canvas.addEventListener('click', primary);
     document.addEventListener('keydown', e => {
-      if (e.code === 'Space') { e.preventDefault(); jump(); }
-      if (e.key === 'Escape') { location.href = '../index.html'; }
+      if (e.key === 'Escape') { location.href = '../index.html'; return; }
+      if (state === 'enter') {
+        const c = entryName[entryPos].charCodeAt(0) - 65;
+        if (e.key === 'ArrowUp' || e.key === 'w') { e.preventDefault(); entryName[entryPos] = String.fromCharCode((c+1)%26+65); }
+        else if (e.key === 'ArrowDown' || e.key === 's') { e.preventDefault(); entryName[entryPos] = String.fromCharCode((c+25)%26+65); }
+        else if (e.key === 'ArrowRight' || e.key === 'd') { e.preventDefault(); entryPos = (entryPos+1)%3; }
+        else if (e.key === 'ArrowLeft' || e.key === 'a') { e.preventDefault(); entryPos = (entryPos+2)%3; }
+        else if (e.code === 'Space' || e.key === 'Enter' || e.key === 'x' || e.key === 'X') { e.preventDefault(); confirmName(); }
+        return;
+      }
+      if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); primary(); }
     });
 
     function drawSky() {
@@ -251,7 +279,6 @@
     function drawOverlay() {
       ctx.fillStyle = 'rgba(3,16,10,0.82)';
       ctx.fillRect(0, 0, W, H);
-      ctx.fillStyle = '#eef6f4';
       ctx.font = '900 26px Trebuchet MS, sans-serif';
       ctx.textAlign = 'center';
       if (state === 'idle') {
@@ -259,19 +286,62 @@
         ctx.fillText('Flappy ŠkoPilot', W/2, H/2 - 24);
         ctx.font = '400 15px sans-serif';
         ctx.fillStyle = '#cdeede';
-        ctx.fillText('Klikni nebo stiskni Mezerník pro start', W/2, H/2 + 10);
+        ctx.fillText('Click or press SPACE to start', W/2, H/2 + 10);
       } else {
         ctx.fillStyle = '#ff6a6a';
-        ctx.fillText('Konec hry!', W/2, H/2 - 36);
+        ctx.fillText('GAME OVER', W/2, H/2 - 36);
         ctx.font = '400 15px sans-serif';
         ctx.fillStyle = '#cdeede';
-        ctx.fillText('Skóre: ' + score + '   Nejlepší: ' + best, W/2, H/2);
-        ctx.fillText('Klikni nebo Mezerník pro restart', W/2, H/2 + 28);
+        ctx.fillText('Score: ' + score + '   Best: ' + best, W/2, H/2);
+        ctx.fillText('SPACE / CLICK to continue', W/2, H/2 + 28);
+      }
+    }
+
+    function drawEnter() {
+      ctx.fillStyle = 'rgba(3,16,10,0.92)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#f5c518'; ctx.font = '900 22px Trebuchet MS, sans-serif';
+      ctx.fillText('NEW HIGH SCORE!', W/2, 78);
+      ctx.fillStyle = '#cdeede'; ctx.font = '400 14px sans-serif';
+      ctx.fillText('Score: ' + score, W/2, 104);
+      ctx.fillStyle = '#62e29a'; ctx.font = '400 13px sans-serif';
+      ctx.fillText('ENTER YOUR INITIALS', W/2, 146);
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i < 3; i++) {
+        const x = W/2 - 60 + i*60;
+        ctx.fillStyle = i === entryPos ? '#2fc56f' : '#0d4631';
+        roundRect(x-22, 178, 44, 52, 6);
+        ctx.fillStyle = '#fff'; ctx.font = '900 30px Trebuchet MS, sans-serif';
+        ctx.fillText(entryName[i], x, 206);
+        if (i === entryPos && Math.floor(tick/20)%2 === 0) {
+          ctx.fillStyle = '#ffff44'; ctx.font = '14px sans-serif';
+          ctx.fillText('▲', x, 164); ctx.fillText('▼', x, 248);
+        }
+      }
+      ctx.fillStyle = '#8aa6a0'; ctx.font = '11px sans-serif'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('UP/DOWN = letter · LEFT/RIGHT = move · SPACE = OK', W/2, 300);
+    }
+
+    function drawScores() {
+      ctx.fillStyle = 'rgba(3,16,10,0.93)'; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#2fc56f'; ctx.font = '900 24px Trebuchet MS, sans-serif';
+      ctx.fillText('HALL OF FAME', W/2, 58);
+      ctx.font = '700 18px monospace';
+      scores.forEach((e, i) => {
+        const y = 104 + i*44;
+        ctx.fillStyle = i === 0 ? '#f5c518' : '#cdeede';
+        ctx.fillText((i+1) + '.   ' + e.n + '   ' + String(e.s).padStart(5,'0'), W/2, y);
+      });
+      if (Math.floor(tick/20)%2 === 0) {
+        ctx.fillStyle = '#ffff44'; ctx.font = '700 14px sans-serif';
+        ctx.fillText('SPACE / CLICK to play again', W/2, H - 22);
       }
     }
 
     function loop(now) {
       requestAnimationFrame(loop);
+      tick++;
       drawSky();
       if (state === 'playing') {
         ball.vy += GRAVITY;
@@ -304,7 +374,9 @@
       for (let p of pipes) drawPipe(p);
       for (let p of pipes) drawCoin(p);
       drawAvatar();
-      if (state !== 'playing') drawOverlay();
+      if (state === 'idle' || state === 'dead') drawOverlay();
+      else if (state === 'enter') drawEnter();
+      else if (state === 'scores') drawScores();
     }
 
     init();

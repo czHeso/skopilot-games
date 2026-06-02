@@ -106,15 +106,19 @@
     .mascot{max-height:clamp(190px,42vh,400px);}
     .logo{height:clamp(50px,9vh,104px);}
   }
-  /* portrait monitor (na výšku) — maskot zůstává VEDLE her, ne nad nimi */
+  /* portrait monitor (na výšku) — maskot VEDLE her, vše seskupené víc na střed */
   @media (max-aspect-ratio:1/1){
-    .main{gap:clamp(10px,2.5vw,28px);}
-    #games{flex:1.25;}
-    #hero{flex:1;}
-    .mascot{max-height:clamp(220px,40vh,600px);}
-    .logo{height:clamp(48px,7vh,100px);}
-    .topbar{display:flex;justify-content:center;}
-    .card{width:clamp(120px,20vw,210px);}
+    .main{justify-content:center; align-items:center;
+          gap:clamp(16px,4vw,46px);
+          padding:clamp(8px,2vh,24px) clamp(14px,3.5vw,44px);}
+    #games{flex:0 1 auto;}
+    #hero{flex:0 1 auto; align-self:center; justify-content:center; padding-bottom:0;}
+    .card{width:clamp(150px,26vw,264px);}
+    .cat-head{font-size:clamp(11px,2.2vw,18px);}
+    .cap{font-size:clamp(10px,1.7vw,14px);}
+    .mascot{max-height:clamp(300px,46vh,660px); max-width:46vw;}
+    .logo{height:clamp(76px,12vh,176px);}
+    .topbar{display:flex; justify-content:center; padding-bottom:clamp(6px,1.5vh,16px);}
   }
   /* velmi úzké displeje (telefon) — teprve tady skládej pod sebe */
   @media (max-width:600px){

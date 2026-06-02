@@ -242,8 +242,8 @@
   function makePiece(){
     // the fuller the well, the more bombs — a safety valve so it stays beatable
     const p = stackPressure();
-    const interval = BOMB_INTERVAL - p * (BOMB_INTERVAL - 3000);   // 13s -> 3s when nearly full
-    const chance   = BOMB_CHANCE + p * 0.40;                        // 12% -> ~52% when nearly full
+    const interval = BOMB_INTERVAL - p * (BOMB_INTERVAL - 5000);   // 13s -> 5s when nearly full
+    const chance   = BOMB_CHANCE + p * (0.34 - BOMB_CHANCE);        // 12% -> ~1 in 3 when nearly full
     if (bombTimer >= interval || Math.random() < chance){
       bombTimer = 0;
       return { type:'BOMB', mat:[[1]], color:'#11110f', r:0, c:0 };
@@ -533,6 +533,21 @@
     if (flash > 0){
       ctx.fillStyle = 'rgba(245,197,24,' + (flash*0.25) + ')';
       ctx.fillRect(0, 0, board.width, board.height);
+    }
+
+    // DANGER — blinking border + label when the stack runs high
+    if (state === 'playing' && stackPressure() > 0.55){
+      const blink = Math.floor(tick/8) % 2 === 0;
+      if (blink){
+        ctx.fillStyle = 'rgba(255,60,60,.12)'; ctx.fillRect(0, 0, board.width, board.height);
+        ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 7;
+        ctx.strokeRect(3.5, 3.5, board.width-7, board.height-7);
+      }
+      ctx.globalAlpha = blink ? 1 : 0.45;
+      ctx.fillStyle = '#ff5555'; ctx.font = '13px PixelArcade, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('! DANGER !', board.width/2, 24);
+      ctx.globalAlpha = 1;
     }
 
     if (state === 'idle')   drawTitle();

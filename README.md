@@ -9,7 +9,7 @@ Vše je čisté HTML/JS/Canvas — žádný build, žádné závislosti. Stačí
 Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený do kategorií:
 
 - **ŠkoPilot** — *Flappy ŠkoPilot*
-- **ŠkoPilot Clip** — *ClipTris* (Tetris) — zatím jen náhled „SOON"
+- **ŠkoPilot Clip** — *ŠkoPilot Clip* (Tetris) — znič nápis CLIP na čas
 - **ŠkoPilot Pro** — *Agent Builder* (plošinovka) — hratelné
 
 ## Co je uvnitř
@@ -18,7 +18,15 @@ Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený d
 |-------|-----|------|----------|
 | `index.html` | **Arcade launcher** | retro výběr her | šipky + Enter / myš |
 | `flappy/` | **Flappy ŠkoPilot** | letová obratnost | Mezerník / klik = skok |
+| `clip/` | **ŠkoPilot Clip** | Tetris na čas | ←→ pohyb, ↑/X otoč, mezerník = hard drop |
 | `pro/` | **ŠkoPilot Pro** | plošinovka, stavba agenta | šipky/joystick + skok, **X** = výstřel |
+
+### ŠkoPilot Clip — Clear the CLIP
+Dole je z bloků (v odstínech žluté) napsané slovo **CLIP**. Cílem je co
+nejrychleji ho zničit mazáním řádků (jako Tetris). Po smazání řádku se bloky
+usadí dolů (kaskáda), takže nápis jde celý dozničit. Občas (malá šance) spadne
+**bomba** = vymaže 2×2. V panelu je **NEXT** (další blok) a **TIME**; leaderboard
+je podle **nejrychlejšího času**.
 
 ### ŠkoPilot Pro — Agent Builder
 V mladoboleslavském cloudu spadly moduly. ŠkoPilot probíhá 3 levely (IT&Dev →

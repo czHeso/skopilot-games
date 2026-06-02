@@ -163,13 +163,10 @@
       <image href="${HEAD}" x="38" y="42" width="42" height="42"/></svg>`,
 
     cliptris:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect x="52" y="6" width="56" height="108" fill="#08231f" stroke="#1d4a44" stroke-width="2"/>
-      <g><rect x="54" y="92" width="18" height="18" fill="#7e9a90"/><rect x="72" y="92" width="18" height="18" fill="#34625b"/>
-        <rect x="90" y="92" width="18" height="18" fill="#a9c4ba"/><rect x="54" y="74" width="18" height="18" fill="#34625b"/>
-        <rect x="90" y="74" width="18" height="18" fill="#f5c518"/><rect x="72" y="56" width="18" height="18" fill="#7e9a90"/>
-        <rect x="90" y="56" width="18" height="18" fill="#34625b"/></g>
-      <g fill="#a9c4ba"><rect x="72" y="14" width="18" height="18"/><rect x="72" y="32" width="18" height="18"/>
-        <rect x="90" y="32" width="18" height="18"/></g></svg>`,
+      <rect x="44" y="6" width="72" height="108" fill="#071d18" stroke="#1d4a44" stroke-width="2"/>
+      <g fill="#2fc56f"><rect x="64" y="14" width="13" height="13"/><rect x="77" y="14" width="13" height="13"/><rect x="77" y="27" width="13" height="13"/></g>
+      <circle cx="54" cy="42" r="6" fill="#2b2b2b"/><line x1="54" y1="37" x2="59" y2="32" stroke="#ffae42" stroke-width="2"/>
+      <g>${[0,1,2,3,4].map(r=>[0,1,2,3,4].map(c=>{const sh=['#f5c518','#ffd23f','#ffdf6b','#e6b422','#ffcf33'][(r+c)%5];return `<rect x="${46+c*14}" y="${72+r*8}" width="13" height="7" fill="${sh}"/>`;}).join('')).join('')}</g></svg>`,
 
     pro:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
       <g fill="#0d4631"><rect x="6" y="104" width="148" height="10" rx="3"/><rect x="14" y="74" width="46" height="8" rx="3"/><rect x="104" y="62" width="50" height="8" rx="3"/></g>
@@ -191,7 +188,7 @@
     { head:'ŠKOPILOT', items:[
       { playable:true, title:'FLAPPY ŠKOPILOT', genre:'FLY &amp; DODGE', url:'flappy/index.html', hi:'sko_flappy_best', art:ART.flappy } ] },
     { head:'ŠKOPILOT CLIP', items:[
-      { playable:false, title:'CLIPTRIS', genre:'STACK THE BLOCKS', art:ART.cliptris } ] },
+      { playable:true, title:'ŠKOPILOT CLIP', genre:'CLEAR THE CLIP!', url:'clip/index.html', hi:'sko_clip_best', time:true, art:ART.cliptris } ] },
     { head:'ŠKOPILOT PRO', items:[
       { playable:true, title:'ŠKOPILOT PRO', genre:'AGENT BUILDER', url:'pro/index.html', hi:'sko_pro_best', art:ART.pro } ] },
   ];
@@ -205,10 +202,13 @@
     cat.items.forEach(it=>{
       const card=document.createElement('div');
       if(it.playable){
-        const hi=localStorage.getItem(it.hi)||0;
+        const raw=localStorage.getItem(it.hi);
+        const hiText = it.time
+          ? 'BEST '+(raw && +raw>0 ? (+raw).toFixed(1)+'s' : '--')
+          : 'HI '+String(raw||0).padStart(5,'0');
         card.className='card';
         card.innerHTML='<div class="frame">'+it.art+'</div><div class="cap">'+it.title+'</div>'+
-          '<div class="genre">'+it.genre+'</div><div class="hi">HI '+String(hi).padStart(5,'0')+'</div>';
+          '<div class="genre">'+it.genre+'</div><div class="hi">'+hiText+'</div>';
         const idx=playables.length;
         playables.push({url:it.url,card});
         card.addEventListener('click',()=>{ sel=idx; render(); launch(); });

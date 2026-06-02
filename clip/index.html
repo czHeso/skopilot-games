@@ -231,9 +231,20 @@
   }
 
   // ====== pieces ======
+  // how dangerously high the stack is above the CLIP base: 0 (calm) .. 1 (near top)
+  function stackPressure(){
+    let top = ROWS;
+    for (let r = 0; r < ROWS; r++){ if (grid[r].some(c => c)){ top = r; break; } }
+    const base = ROWS - CLIP_ART.length;            // top of the CLIP sign
+    return Math.min(1, Math.max(0, base - top) / base);
+  }
+
   function makePiece(){
-    // bomb if the safety timer elapsed, or by random chance
-    if (bombTimer >= BOMB_INTERVAL || Math.random() < BOMB_CHANCE){
+    // the fuller the well, the more bombs — a safety valve so it stays beatable
+    const p = stackPressure();
+    const interval = BOMB_INTERVAL - p * (BOMB_INTERVAL - 3000);   // 13s -> 3s when nearly full
+    const chance   = BOMB_CHANCE + p * 0.40;                        // 12% -> ~52% when nearly full
+    if (bombTimer >= interval || Math.random() < chance){
       bombTimer = 0;
       return { type:'BOMB', mat:[[1]], color:'#11110f', r:0, c:0 };
     }

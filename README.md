@@ -9,7 +9,7 @@ Vše je čisté HTML/JS/Canvas — žádný build, žádné závislosti. Stačí
 Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený do kategorií:
 
 - **ŠkoPilot** — *Flappy ŠkoPilot*
-- **ŠkoPilot Clip** — *ClipTris* (Tetris) — zatím jen náhled „SOON"
+- **ŠkoPilot Clip** — *ŠkoPilot Clip* (Tetris na čas) — hratelné
 - **ŠkoPilot Pro** — *Agent Builder* (plošinovka) — hratelné
 
 ## Co je uvnitř
@@ -18,7 +18,17 @@ Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený d
 |-------|-----|------|----------|
 | `index.html` | **Arcade launcher** | retro výběr her | šipky + Enter / myš |
 | `flappy/` | **Flappy ŠkoPilot** | letová obratnost | Mezerník / klik = skok |
+| `clip/` | **ŠkoPilot Clip** | Tetris na čas | šipky = posun, **↑/X** = rotace, Mezerník = hard drop |
 | `pro/` | **ŠkoPilot Pro** | plošinovka, stavba agenta | šipky/joystick + skok, **X** = výstřel |
+
+### ŠkoPilot Clip — Tetris na čas
+Dole je předem napsané slovo **CLIP** pixel grafikou — každá buňka jiný
+**odstín žluté**. Cílem je nápis **co nejrychleji zničit**: padají tetromina a
+když spojíš celý řádek, zmizí (klasicky jako Tetris) a s ním i kousek nápisu.
+Občas (**fakt malá šance**) spadne místo dílu **bomba**, která vybuchne a zničí
+**3×3** kolem dopadu. V bočním panelu vidíš **další padající díl**, aktuální
+**čas** a **síň slávy nejrychlejších časů** (čím méně, tím líp). Ovládání je
+nahoře v souboru přehledně v `keydown` — snadno upravíš pro USB enkodér.
 
 ### ŠkoPilot Pro — Agent Builder
 V mladoboleslavském cloudu spadly moduly. ŠkoPilot probíhá 3 levely (IT&Dev →

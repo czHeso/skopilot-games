@@ -150,14 +150,15 @@
     S:'#4f8f7e', Z:'#2f6f63', J:'#5b8c82', L:'#3d7a6e',
   };
   const BAG = Object.keys(SHAPES);
-  const BOMB_CHANCE = 0.06;      // really small chance
+  const BOMB_CHANCE = 0.12;      // random chance per piece
+  const BOMB_INTERVAL = 13000;   // ms — guarantee at least one bomb this often
 
   // ====== state ======
   let grid, current, nextPiece, clipRemaining;
   let state = 'idle';            // idle | playing | dead | enter | scores
   let startTime = 0, finalCs = 0, liveCs = 0;
-  let dropAcc = 0, lastT = 0;
-  const DROP_INTERVAL = 620;     // ms
+  let dropAcc = 0, lastT = 0, bombTimer = 0;
+  const DROP_INTERVAL = 760;     // ms
   let tick = 0;
   let particles = [];
   let flash = 0;
@@ -167,10 +168,14 @@
   // ====== leaderboard (fastest times) ======
   function loadScores(){ try { return JSON.parse(localStorage.getItem('sko_clip_scores')) || []; } catch(e){ return []; } }
   function saveScores(s){ localStorage.setItem('sko_clip_scores', JSON.stringify(s)); }
+  // friendlier default times (centiseconds): 2:00, 2:40, 3:20, 4:00, 5:00
+  const SEED_VERSION = '2';
+  const DEFAULT_SCORES = [{n:'SKO',t:12000},{n:'PIL',t:16000},{n:'OT0',t:20000},{n:'AAA',t:24000},{n:'BUG',t:30000}];
   let scores = loadScores();
-  if (scores.length === 0){
-    scores = [{n:'SKO',t:4500},{n:'PIL',t:6000},{n:'OT0',t:8000},{n:'AAA',t:11000},{n:'BUG',t:16000}];
+  if (scores.length === 0 || localStorage.getItem('sko_clip_ver') !== SEED_VERSION){
+    scores = DEFAULT_SCORES.map(e => ({...e}));
     saveScores(scores);
+    localStorage.setItem('sko_clip_ver', SEED_VERSION);
   }
   let entryName = ['A','A','A'], entryPos = 0;
 
@@ -227,7 +232,9 @@
 
   // ====== pieces ======
   function makePiece(){
-    if (Math.random() < BOMB_CHANCE){
+    // bomb if the safety timer elapsed, or by random chance
+    if (bombTimer >= BOMB_INTERVAL || Math.random() < BOMB_CHANCE){
+      bombTimer = 0;
       return { type:'BOMB', mat:[[1]], color:'#11110f', r:0, c:0 };
     }
     const type = BAG[(Math.random() * BAG.length) | 0];
@@ -389,7 +396,7 @@
     resetBoard();
     state = 'playing';
     startTime = performance.now();
-    dropAcc = 0; lastT = startTime;
+    dropAcc = 0; lastT = startTime; bombTimer = 0;
   }
 
   function primary(){
@@ -630,6 +637,7 @@
       timeEl.textContent = fmt(liveCs);
 
       dropAcc += now - lastT;
+      bombTimer += now - lastT;
       if (dropAcc >= DROP_INTERVAL){ dropAcc = 0; softDrop(); }
     }
     lastT = now;

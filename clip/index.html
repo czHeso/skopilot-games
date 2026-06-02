@@ -59,7 +59,7 @@
   <button id="menuBtn" onclick="location.href='../index.html'">◀ MENU</button>
   <div id="stage">
     <div id="well">
-      <canvas id="board" width="308" height="440"></canvas>
+      <canvas id="board" width="330" height="440"></canvas>
     </div>
     <div id="side">
       <div class="panel">
@@ -94,7 +94,7 @@
 
 <script>
   // ====== playfield dimensions ======
-  const COLS = 14, ROWS = 20, CELL = 22;
+  const COLS = 15, ROWS = 20, CELL = 22;
   const board = document.getElementById('board');
   const ctx = board.getContext('2d');
   const nextC = document.getElementById('next');
@@ -116,14 +116,13 @@
   window.addEventListener('load', fitStage);
 
   // ====== CLIP sign (pixel art) on the bottom rows ======
-  // margin(0) C(1-2) gap(3) L(4-6) gap(7) I(8) gap(9) P(10-12) margin(13)
-  // C is 2 wide, I is a single bar; spare space sits as side margins (centred)
+  // C(0-2) gap(3) L(4-6) gap(7) I(8-10) gap(11) P(12-14)
   const CLIP_ART = [
-    ".XX.X...X.XX..",
-    ".X..X...X.X.X.",
-    ".X..X...X.XX..",
-    ".X..X...X.X...",
-    ".XX.XXX.X.X...",
+    "XXX.X...XXX.XXX",
+    "X...X....X..X.X",
+    "X...X....X..XXX",
+    "X...X....X..X..",
+    "XXX.XXX.XXX.X..",
   ];
 
   // a different shade of yellow for every cell of the sign

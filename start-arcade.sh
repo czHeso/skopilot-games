@@ -39,5 +39,6 @@ exec "$BROWSER" \
   --disable-features=Translate \
   --overscroll-history-navigation=0 \
   --incognito \
+  --password-store=basic \
   --check-for-update-interval=31536000 \
   "$URL"

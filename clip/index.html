@@ -7,56 +7,64 @@
   <style>
     @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
     :root{
-      --bg:#092725; --line:#1d4a44;
+      --bg:#040b09; --line:#155047; --line2:#0c3329;
+      --green:#39ff8c; --green2:#1f9c5e;
       --sage:#7e9a90; --sage2:#a9c4ba; --teal:#34625b;
-      --white:#ffffff; --gold:#f5c518;
+      --white:#ffffff; --gold:#ffcf2e;
     }
     *{ margin:0; padding:0; box-sizing:border-box; }
     html,body{ height:100%; }
     body{
       background:var(--bg); color:var(--white);
       display:flex; align-items:center; justify-content:center;
-      height:100vh; overflow:hidden; user-select:none;
+      height:100vh; overflow:hidden; user-select:none; image-rendering:pixelated;
       font-family:'PixelArcade','Courier New',monospace;
     }
+    /* circuit backdrop */
+    #bg{ position:fixed; inset:0; z-index:0; pointer-events:none;
+      background:radial-gradient(ellipse at 50% 42%, rgba(8,30,24,.35), rgba(4,11,9,.94) 80%),
+                 url('../assets/8bit/circuit.jpg') center/cover no-repeat; opacity:.45; }
     /* CRT scanlines + vignette */
     body::after{ content:""; position:fixed; inset:0; pointer-events:none; z-index:50;
-      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.14) 3px,rgba(0,0,0,0) 4px); }
+      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px); }
     body::before{ content:""; position:fixed; inset:0; pointer-events:none; z-index:49;
-      background:radial-gradient(ellipse at 50% 44%, transparent 58%, rgba(0,0,0,.5) 100%); }
+      background:radial-gradient(ellipse at 50% 44%, transparent 56%, rgba(0,0,0,.55) 100%); }
 
     #menuBtn{
       position:fixed; top:14px; left:14px; z-index:60;
-      background:#0c2418; color:#b8f5da; border:1px solid #235c41;
-      border-radius:8px; padding:8px 14px; font-size:12px; letter-spacing:1px;
+      background:#0c2418; color:#c9ffe2; border:2px solid var(--green2);
+      padding:9px 14px; font-size:10px; letter-spacing:1px;
       cursor:pointer; font-family:inherit;
+      box-shadow:0 0 0 2px var(--bg), 0 0 14px rgba(57,255,140,.25);
     }
-    #menuBtn:hover{ background:#11331f; }
+    #menuBtn:hover{ background:#11331f; color:var(--green); }
 
-    #stage{ transform-origin:center center; position:relative; display:flex; gap:26px; align-items:flex-start; }
+    #stage{ transform-origin:center center; position:relative; z-index:3; display:flex; gap:26px; align-items:flex-start; }
 
     #well{ position:relative; }
-    canvas#board{ display:block; border:3px solid var(--line); border-radius:10px;
-      background:#06201d; box-shadow:0 0 28px rgba(245,197,24,.10), inset 0 0 0 2px #06201d; }
+    canvas#board{ display:block; border:3px solid var(--line); image-rendering:pixelated;
+      background:#06201d;
+      box-shadow:0 0 0 3px var(--bg), 0 0 0 5px var(--line2), 0 0 30px rgba(57,255,140,.18); }
 
     /* side panel */
-    #side{ width:160px; display:flex; flex-direction:column; gap:16px; padding-top:4px; }
-    .panel{ border:2px solid var(--line); border-radius:9px; background:#08231f;
-      padding:10px 12px; }
-    .panel .lab{ font-size:8px; letter-spacing:2px; color:var(--sage); margin-bottom:8px; }
+    #side{ width:160px; display:flex; flex-direction:column; gap:14px; padding-top:4px; }
+    .panel{ border:2px solid var(--line); background:#08231f; padding:10px 12px;
+      box-shadow:0 0 0 2px var(--bg), 0 0 0 3px var(--line2); }
+    .panel .lab{ font-size:8px; letter-spacing:2px; color:var(--green2); margin-bottom:8px; }
     .big{ font-size:20px; color:var(--white); letter-spacing:1px; }
     .gold{ color:var(--gold); }
     #nextWrap{ display:flex; justify-content:center; }
-    canvas#next{ display:block; }
+    canvas#next{ display:block; image-rendering:pixelated; }
     #clipLeft{ font-size:20px; color:var(--gold); letter-spacing:1px; }
     .top li{ list-style:none; font-size:9px; color:var(--sage2); letter-spacing:1px;
       display:flex; justify-content:space-between; margin:5px 0; }
     .top li b{ color:var(--gold); font-weight:normal; }
-    .hint{ font-size:7px; line-height:1.7; color:var(--teal); letter-spacing:1px; }
+    .hint{ font-size:7px; line-height:1.7; color:var(--green2); letter-spacing:1px; }
   </style>
 </head>
 <body>
-  <button id="menuBtn" onclick="location.href='../index.html'">◀ MENU</button>
+  <div id="bg"></div>
+  <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
   <div id="stage">
     <div id="well">
       <canvas id="board" width="330" height="440"></canvas>
@@ -97,8 +105,10 @@
   const COLS = 15, ROWS = 20, CELL = 22;
   const board = document.getElementById('board');
   const ctx = board.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
   const nextC = document.getElementById('next');
   const nctx = nextC.getContext('2d');
+  nctx.imageSmoothingEnabled = false;
   const stage = document.getElementById('stage');
 
   const timeEl = document.getElementById('time');
@@ -570,7 +580,7 @@
   function drawTitle(){
     panel(0.82);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#f5c518'; ctx.font = '18px PixelArcade, monospace';
+    ctx.fillStyle = '#ffcf2e'; ctx.font = '18px PixelArcade, monospace';
     ctx.fillText('ŠKOPILOT', board.width/2, 120);
     ctx.fillText('CLIP', board.width/2, 150);
     ctx.fillStyle = '#cdeede'; ctx.font = '8px PixelArcade, monospace';
@@ -580,7 +590,7 @@
     ctx.fillStyle = '#ffae3b'; ctx.font = '7px PixelArcade, monospace';
     ctx.fillText('WATCH OUT FOR BOMBS!', board.width/2, 270);
     if (Math.floor(tick/20)%2 === 0){
-      ctx.fillStyle = '#62e29a'; ctx.font = '9px PixelArcade, monospace';
+      ctx.fillStyle = '#39ff8c'; ctx.font = '9px PixelArcade, monospace';
       ctx.fillText('ENTER / SPACE = START', board.width/2, 320);
     }
   }
@@ -594,7 +604,7 @@
     ctx.fillText('THE WELL OVERFLOWED', board.width/2, 200);
     ctx.fillText('CLIP LEFT: ' + clipRemaining, board.width/2, 224);
     if (Math.floor(tick/20)%2 === 0){
-      ctx.fillStyle = '#62e29a';
+      ctx.fillStyle = '#39ff8c';
       ctx.fillText('SPACE / CLICK = RETRY', board.width/2, 270);
     }
   }
@@ -602,11 +612,11 @@
   function drawEnter(){
     panel(0.92);
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#f5c518'; ctx.font = '13px PixelArcade, monospace';
+    ctx.fillStyle = '#ffcf2e'; ctx.font = '13px PixelArcade, monospace';
     ctx.fillText('NEW RECORD!', board.width/2, 90);
     ctx.fillStyle = '#cdeede'; ctx.font = '11px PixelArcade, monospace';
     ctx.fillText('TIME ' + fmt(finalCs), board.width/2, 120);
-    ctx.fillStyle = '#62e29a'; ctx.font = '8px PixelArcade, monospace';
+    ctx.fillStyle = '#39ff8c'; ctx.font = '8px PixelArcade, monospace';
     ctx.fillText('ENTER YOUR INITIALS', board.width/2, 160);
     ctx.textBaseline = 'middle';
     for (let i = 0; i < 3; i++){
@@ -627,18 +637,18 @@
   function drawScores(){
     panel(0.93);
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#f5c518'; ctx.font = '14px PixelArcade, monospace';
+    ctx.fillStyle = '#ffcf2e'; ctx.font = '14px PixelArcade, monospace';
     ctx.fillText('FASTEST TIMES', board.width/2, 70);
     ctx.font = '11px PixelArcade, monospace';
     scores.forEach((e, i) => {
       const y = 120 + i*42;
-      ctx.fillStyle = (i === 0) ? '#f5c518' : '#cdeede';
+      ctx.fillStyle = (i === 0) ? '#ffcf2e' : '#cdeede';
       ctx.textAlign = 'left';  ctx.fillText((i+1) + '. ' + e.n, 60, y);
       ctx.textAlign = 'right'; ctx.fillText(fmt(e.t), board.width - 50, y);
     });
     ctx.textAlign = 'center';
     if (Math.floor(tick/20)%2 === 0){
-      ctx.fillStyle = '#62e29a'; ctx.font = '8px PixelArcade, monospace';
+      ctx.fillStyle = '#39ff8c'; ctx.font = '8px PixelArcade, monospace';
       ctx.fillText('SPACE / CLICK = PLAY AGAIN', board.width/2, board.height - 26);
     }
   }

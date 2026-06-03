@@ -76,6 +76,7 @@ const itemImgs={};
 ['floppy','coffee','shield'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/items/'+k+'.png'; itemImgs[k]=im; });
 const bgImgs={};
 ['it','factory','hr'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/bg/'+k+'.png'; bgImgs[k]=im; });
+const carImgs=['car_green','car_silver','car_white'].map(k=>{ const im=new Image(); im.src='../assets/8bit/items/'+k+'.png'; return im; });
 
 /* ===================== CONSTANTS ===================== */
 const GRAV=0.62, MAXV=13, SPEED=3.3, JUMP=-13.2, STEP=1000/60;
@@ -279,17 +280,15 @@ function fxIT(){
   ctx.textAlign='left'; ctx.textBaseline='alphabetic';
   for(let i=0;i<34;i++){ const x=(i*47)%W, y=((tick*1.3 + i*61)%600); ctx.fillText((i*7%2)?'1':'0', x, y); }
 }
-// Factory: crates riding the conveyor band
+// Factory: finished ŠkoPilot cars riding the assembly line (moving left)
 function fxFactory(){
-  const cols=['#39ff8c','#9fb4d6','#caa64a'];
   for(let i=0;i<3;i++){
-    let x=((i*300 - tick*0.9)%(W+120)); if(x<-120) x+=W+120;
-    const y=360, s=34;
-    ctx.fillStyle='#3a2e0c'; ctx.fillRect(x,y,s,s);
-    ctx.fillStyle=cols[i]; ctx.fillRect(x,y,s,4); ctx.fillRect(x,y,4,s);
-    ctx.fillStyle='#241c05'; ctx.fillRect(x+s-4,y,4,s); ctx.fillRect(x,y+s-4,s,4);
-    ctx.fillStyle='rgba(0,0,0,.45)'; ctx.font='7px PixelArcade,monospace'; ctx.textAlign='center';
-    ctx.fillText('SKODA', x+s/2, y+s/2+3);
+    let x=((i*300 - tick*0.9)%(W+140)); if(x<-140) x+=W+140;
+    const img=carImgs[i%carImgs.length];
+    if(img.complete && img.naturalWidth){
+      const cw=64, ch=cw*img.naturalHeight/img.naturalWidth;
+      ctx.drawImage(img, x, 388-ch, cw, ch);
+    }
   }
 }
 // HR: papers floating across the office

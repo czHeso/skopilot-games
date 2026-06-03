@@ -36,7 +36,8 @@ exec "$BROWSER" \
   --noerrordialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \
-  --disable-features=Translate \
+  --disable-features=Translate,TranslateUI \
+  --disable-translate \
   --overscroll-history-navigation=0 \
   --incognito \
   --password-store=basic \

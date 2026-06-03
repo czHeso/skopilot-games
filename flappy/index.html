@@ -82,14 +82,16 @@
 
     let gapQueue = [];
     function buildGapQueue() {
-      // Friendly gaps for casual players (50+) — never a tight hole.
-      const big   = () => Math.floor(Math.random() * 30) + 205;  // 205–234
-      const mid   = () => Math.floor(Math.random() * 25) + 175;  // 175–199
-      const comfy = () => Math.floor(Math.random() * 20) + 155;  // 155–174 (smallest possible)
+      // Difficulty ramps with score — gentle start, classic-hard later (still beatable).
+      const wide   = () => Math.floor(Math.random() * 30) + 200;  // 200–229  very easy
+      const medium = () => Math.floor(Math.random() * 30) + 160;  // 160–189  comfortable
+      const mid    = () => Math.floor(Math.random() * 20) + 125;  // 125–144  getting tough
+      const small  = () => Math.floor(Math.random() * 18) +  95;  //  95–112  hard (but doable)
       let arr;
-      if (score >= 20)      arr = [mid(), comfy(), mid(), comfy(), mid()];
-      else if (score >= 10) arr = [big(), mid(), mid(), comfy(), mid()];
-      else                  arr = [big(), big(), mid(), big(), mid()];
+      if      (score < 5)   arr = [wide(), wide(), wide(), wide(), wide()];                 // only wide
+      else if (score < 10)  arr = [wide(), medium(), wide(), medium(), wide()];             // wide + smaller
+      else if (score < 20)  arr = [mid(), mid(), mid(), small(), small()];                  // like before — much harder
+      else                  arr = [mid(), small(), small(), mid(), small()];                // standard hard, beatable
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];

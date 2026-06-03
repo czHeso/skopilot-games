@@ -5,54 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Flappy ŠkoPilot</title>
   <style>
+    @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html,body{height:100%;}
     body {
-      background:#03100a;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height:100vh;
-      overflow:hidden;
-      font-family: 'Trebuchet MS', system-ui, sans-serif;
-      user-select:none;
+      background:#040b09;
+      display: flex; align-items: center; justify-content: center;
+      height:100vh; overflow:hidden;
+      font-family: 'PixelArcade','Courier New', monospace;
+      user-select:none; image-rendering:pixelated;
     }
+    /* circuit backdrop */
+    #bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+      background:radial-gradient(ellipse at 50% 40%, rgba(8,30,24,.4), rgba(4,11,9,.94) 80%),
+                 url('../assets/8bit/circuit.jpg') center/cover no-repeat; opacity:.45;}
     /* CRT scanlines */
     body::after{
       content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
-      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);
+      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.18) 3px,rgba(0,0,0,0) 4px);
     }
-    #stage{ transform-origin:center center; position:relative; }
-    #hud { display:flex; gap:2rem; margin-bottom:.6rem; font-size:18px; color:#5a8a72; letter-spacing:1px; }
-    #hud span { font-weight:700; color:#eef6f4; }
-    #canvas { border-radius:12px; border:2px solid #1c4a35; display:block; cursor:pointer;
-              box-shadow:0 0 30px rgba(47,197,111,.25); }
-    #hint { margin-top:.5rem; font-size:14px; color:#3f6b55; text-align:center; }
+    #stage{ transform-origin:center center; position:relative; z-index:3; }
+    #hud { display:flex; gap:1.6rem; margin-bottom:.7rem; font-size:12px; color:#1f9c5e; letter-spacing:1px; }
+    #hud span { color:#c9ffe2; }
+    #canvas { border:3px solid #155047; display:block; cursor:pointer; image-rendering:pixelated;
+              box-shadow:0 0 0 3px #040b09, 0 0 0 5px #0c3329, 0 0 34px rgba(57,255,140,.28); }
+    #hint { margin-top:.7rem; font-size:8px; color:#1f9c5e; text-align:center; letter-spacing:1px; line-height:1.6; }
     #menuBtn{
       position:fixed; top:14px; left:14px; z-index:60;
-      background:#0c2418; color:#b8f5da; border:1px solid #235c41;
-      border-radius:8px; padding:8px 14px; font-size:15px; letter-spacing:1px;
+      background:#0c2418; color:#c9ffe2; border:2px solid #1f9c5e;
+      padding:9px 14px; font-size:10px; letter-spacing:1px;
       cursor:pointer; font-family:inherit;
+      box-shadow:0 0 0 2px #040b09, 0 0 14px rgba(57,255,140,.25);
     }
-    #menuBtn:hover{ background:#11331f; }
+    #menuBtn:hover{ background:#11331f; color:#39ff8c; }
   </style>
 </head>
 <body>
-  <button id="menuBtn" onclick="location.href='../index.html'">◀ MENU</button>
+  <div id="bg"></div>
+  <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
   <div id="stage">
-    <div id="hud">SCORE: <span id="score">0</span>&nbsp;&nbsp; BEST: <span id="best">0</span>&nbsp;&nbsp; 🪙 <span id="coins">0</span></div>
+    <div id="hud">SCORE <span id="score">0</span> &nbsp; BEST <span id="best">0</span> &nbsp; <span style="color:#ffcf2e">$</span> <span id="coins">0</span></div>
     <canvas id="canvas" width="580" height="380"></canvas>
-    <div id="hint">SPACE or CLICK = flap &nbsp;·&nbsp; ESC = menu</div>
+    <div id="hint">SPACE / CLICK = FLAP &nbsp;&middot;&nbsp; ESC = MENU</div>
   </div>
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     const scoreEl = document.getElementById('score');
     const bestEl = document.getElementById('best');
     const coinsEl = document.getElementById('coins');
     const stage = document.getElementById('stage');
 
-    // === Škálování na celou obrazovku (arcade) ===
+    // === Scale to full screen (arcade) ===
     function fitStage(){
       const s = Math.min(window.innerWidth / stage.offsetWidth,
                          window.innerHeight / stage.offsetHeight);
@@ -69,28 +74,24 @@
     const PIPE_SPEED = 2.4;
     const PIPE_INTERVAL = 1600;
     const BALL_X = 110;
+    const GROUND = 40;
 
     const HIT_RX = 22;
     const HIT_RY = 19;
     const HIT_OY = 0;
-    const AV_W = HIT_RX * 2 + 2;
-    const AV_H = HIT_RY * 2 + 2;
 
     let gapQueue = [];
     function buildGapQueue() {
-      const big   = () => Math.floor(Math.random() * 20) + 180;
-      const mid   = () => Math.floor(Math.random() * 20) + 125;
-      const small = () => Math.floor(Math.random() * 15) + 90;
-
+      // Difficulty ramps with score — gentle start, classic-hard later (still beatable).
+      const wide   = () => Math.floor(Math.random() * 30) + 200;  // 200–229  very easy
+      const medium = () => Math.floor(Math.random() * 30) + 160;  // 160–189  comfortable
+      const mid    = () => Math.floor(Math.random() * 20) + 125;  // 125–144  getting tough
+      const small  = () => Math.floor(Math.random() * 18) +  95;  //  95–112  hard (but doable)
       let arr;
-      if (score >= 20) {
-        arr = [mid(), small(), small(), small(), small()];
-      } else if (score >= 10) {
-        arr = [mid(), mid(), mid(), small(), small()];
-      } else {
-        arr = [big(), mid(), mid(), mid(), small()];
-      }
-
+      if      (score < 5)   arr = [wide(), wide(), wide(), wide(), wide()];                 // only wide
+      else if (score < 10)  arr = [wide(), medium(), wide(), medium(), wide()];             // wide + smaller
+      else if (score < 20)  arr = [mid(), mid(), mid(), small(), small()];                  // like before — much harder
+      else                  arr = [mid(), small(), small(), mid(), small()];                // standard hard, beatable
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
@@ -102,35 +103,21 @@
       return gapQueue.shift();
     }
 
-    const avatarImg = new Image();
-    let avatarCanvas = null;
-
-    avatarImg.onload = () => {
-      const oc = document.createElement('canvas');
-      oc.width = avatarImg.width;
-      oc.height = avatarImg.height;
-      const oc2 = oc.getContext('2d');
-      oc2.drawImage(avatarImg, 0, 0);
-      try {
-        const id = oc2.getImageData(0, 0, oc.width, oc.height);
-        const d = id.data;
-        for (let i = 0; i < d.length; i += 4) {
-          const br = d[i] + d[i+1] + d[i+2];
-          if (br < 60) d[i+3] = 0;
-          else if (br < 120) d[i+3] = Math.round((br - 60) / 60 * 255);
-        }
-        oc2.putImageData(id, 0, 0);
-      } catch(e){ /* cross-origin u file:// někdy blokuje – necháme tak */ }
-      avatarCanvas = oc;
-    };
-    // Hlava maskota ŠkoPilot
-    avatarImg.src = '../assets/skopilotHead.png';
+    // ŠkoPilot 8bit head (transparent PNG)
+    const sprite = new Image();
+    let spriteReady = false;
+    sprite.onload = () => { spriteReady = true; };
+    sprite.onerror = () => { sprite.onerror = null; sprite.src = '../assets/skopilotHead.png'; };
+    sprite.src = '../assets/8bit/skopilot-head.png';
 
     let ball, pipes, coins, pipeCount, score, best, state, lastPipe, tick = 0;
+    // fixed-timestep simulation (frame-rate independent — no slow/fast on FPS dips)
+    const STEP = 1000 / 60;
+    let acc = 0, lastTs = 0, simTime = 0;
     best = +localStorage.getItem('sko_flappy_best') || 0;
     bestEl.textContent = best;
 
-    // === Hall of Fame (leaderboard) ===
+    // === Hall of Fame ===
     function loadScores(){ try { return JSON.parse(localStorage.getItem('sko_flappy_scores')) || []; } catch(e){ return []; } }
     function saveScores(s){ localStorage.setItem('sko_flappy_scores', JSON.stringify(s)); }
     let scores = loadScores();
@@ -140,20 +127,15 @@
     function init() {
       ball = { y: H / 2, vy: 0 };
       pipes = [];
-      score = 0;
-      coins = 0;
-      pipeCount = 0;
-      state = 'idle';
-      lastPipe = 0;
-
+      score = 0; coins = 0; pipeCount = 0;
+      state = 'idle'; lastPipe = 0; simTime = 0; acc = 0;
       gapQueue = [];
-      scoreEl.textContent = 0;
-      coinsEl.textContent = 0;
+      scoreEl.textContent = 0; coinsEl.textContent = 0;
     }
 
     function spawnPipe() {
       const gap = nextGapValue();
-      const minH = 50, maxH = H - 80 - 50 - gap;
+      const minH = 50, maxH = H - GROUND - 50 - gap;
       const topH = Math.floor(Math.random() * (maxH - minH) + minH);
       pipeCount++;
       const hasCoin = (pipeCount % 5 === 0);
@@ -194,68 +176,83 @@
       if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); primary(); }
     });
 
+    // === background: dark + scrolling binary columns + ground ===
     function drawSky() {
-      ctx.fillStyle = '#07140d';
-      ctx.fillRect(0, 0, W, H - 40);
+      ctx.fillStyle = '#04100b';
+      ctx.fillRect(0, 0, W, H - GROUND);
+      // faint binary rain (kept light for low-end hardware)
+      ctx.font = '12px PixelArcade, monospace';
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      for (let cx = 6; cx < W; cx += 34) {
+        const colShift = (tick * (0.6 + (cx % 3) * 0.25)) % (H - GROUND + 60);
+        for (let k = 0; k < 5; k++) {
+          const yy = ((colShift + k * 34) % (H - GROUND + 60)) - 14;
+          if (yy < -12 || yy > H - GROUND) continue;
+          ctx.globalAlpha = 0.06 + (k === 0 ? 0.05 : 0);
+          ctx.fillStyle = k === 0 ? '#39ff8c' : '#1f9c5e';
+          ctx.fillText(((cx + (yy|0)) % 5) ? '0' : '1', cx, yy);
+        }
+      }
+      ctx.globalAlpha = 1;
+      // ground
       ctx.fillStyle = '#0d2c1d';
-      ctx.fillRect(0, H - 40, W, 40);
-    }
-
-    function roundRect(x, y, w, h, r) {
-      ctx.beginPath();
-      ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y);
-      ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-      ctx.lineTo(x+w, y+h-r);
-      ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-      ctx.lineTo(x+r, y+h);
-      ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-      ctx.lineTo(x, y+r);
-      ctx.quadraticCurveTo(x, y, x+r, y);
-      ctx.closePath(); ctx.fill();
+      ctx.fillRect(0, H - GROUND, W, GROUND);
+      ctx.fillStyle = '#155047';
+      ctx.fillRect(0, H - GROUND, W, 3);
+      ctx.fillStyle = '#0a2417';
+      for (let x = (tick * PIPE_SPEED) % 24; x < W; x += 24) ctx.fillRect(W - x, H - GROUND + 6, 12, GROUND - 6);
     }
 
     function drawPipe(p) {
-      ctx.fillStyle = '#2fc56f';
-      roundRect(p.x, 0, PIPE_W, p.topH, 5);
-      roundRect(p.x, p.topH + p.gap, PIPE_W, H - p.topH - p.gap - 40, 5);
+      const bot = p.topH + p.gap;
+      // body
+      ctx.fillStyle = '#1f9c5e';
+      ctx.fillRect(p.x, 0, PIPE_W, p.topH);
+      ctx.fillRect(p.x, bot, PIPE_W, H - bot - GROUND);
+      // pixel highlight + shade
+      ctx.fillStyle = '#39ff8c';
+      ctx.fillRect(p.x + 4, 0, 6, p.topH);
+      ctx.fillRect(p.x + 4, bot, 6, H - bot - GROUND);
+      ctx.fillStyle = '#0d4631';
+      ctx.fillRect(p.x + PIPE_W - 8, 0, 8, p.topH);
+      ctx.fillRect(p.x + PIPE_W - 8, bot, 8, H - bot - GROUND);
+      // caps
       ctx.fillStyle = '#0d4631';
       ctx.fillRect(p.x - 5, p.topH - 18, PIPE_W + 10, 18);
-      ctx.fillRect(p.x - 5, p.topH + p.gap, PIPE_W + 10, 18);
+      ctx.fillRect(p.x - 5, bot, PIPE_W + 10, 18);
+      ctx.fillStyle = '#39ff8c';
+      ctx.fillRect(p.x - 5, p.topH - 18, PIPE_W + 10, 3);
+      ctx.fillRect(p.x - 5, bot + 15, PIPE_W + 10, 3);
     }
 
     function drawCoin(p) {
       if (!p.hasCoin || p.coinCollected) return;
-      const cx = p.coinX, cy = p.coinY, r = 10;
+      const cx = p.coinX, cy = p.coinY, s = 9;
       ctx.save();
-      ctx.shadowColor = '#ffe066';
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = '#f5c518';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(cx - 3, cy - 3, r * 0.45, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,200,0.55)';
-      ctx.fill();
-      ctx.fillStyle = '#c8960a';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('$', cx, cy);
+      ctx.shadowColor = '#ffcf2e'; ctx.shadowBlur = 12;
+      ctx.fillStyle = '#ffcf2e';
+      ctx.fillRect(cx - s, cy - s, s * 2, s * 2);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff4b0'; ctx.fillRect(cx - s + 2, cy - s + 2, 4, 4);
+      ctx.fillStyle = '#7a5c00';
+      ctx.font = 'bold 11px PixelArcade, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('$', cx, cy + 1);
       ctx.restore();
     }
 
     function drawAvatar() {
-      const tilt = Math.max(-0.4, Math.min(0.4, ball.vy * 0.05));
+      const tilt = Math.max(-0.4, Math.min(0.5, ball.vy * 0.05));
       ctx.save();
       ctx.translate(BALL_X, ball.y + HIT_OY);
       ctx.rotate(tilt);
-      if (avatarCanvas) {
-        ctx.drawImage(avatarCanvas, -AV_W/2, -AV_H/2, AV_W, AV_H);
+      if (spriteReady) {
+        const sw = 52, sh = sw * sprite.height / sprite.width;
+        ctx.drawImage(sprite, -sw/2, -sh/2, sw, sh);
       } else {
-        ctx.beginPath();
-        ctx.ellipse(0, 0, HIT_RX, HIT_RY, 0, 0, Math.PI*2);
-        ctx.fillStyle = '#2fc56f'; ctx.fill();
+        ctx.fillStyle = '#39ff8c';
+        ctx.fillRect(-HIT_RX, -HIT_RY, HIT_RX*2, HIT_RY*2);
       }
       ctx.restore();
     }
@@ -276,101 +273,117 @@
       return false;
     }
 
+    function panel(a){ ctx.fillStyle = 'rgba(4,11,9,'+a+')'; ctx.fillRect(0,0,W,H); }
+
     function drawOverlay() {
-      ctx.fillStyle = 'rgba(3,16,10,0.82)';
-      ctx.fillRect(0, 0, W, H);
-      ctx.font = '900 26px Trebuchet MS, sans-serif';
-      ctx.textAlign = 'center';
+      panel(0.84);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       if (state === 'idle') {
-        ctx.fillStyle = '#2fc56f';
-        ctx.fillText('Flappy ŠkoPilot', W/2, H/2 - 24);
-        ctx.font = '400 15px sans-serif';
-        ctx.fillStyle = '#cdeede';
-        ctx.fillText('Click or press SPACE to start', W/2, H/2 + 10);
+        ctx.fillStyle = '#39ff8c'; ctx.font = '20px PixelArcade, monospace';
+        ctx.fillText('FLAPPY', W/2, H/2 - 36);
+        ctx.fillText('ŠKOPILOT', W/2, H/2 - 8);
+        if (Math.floor(tick/20)%2 === 0) {
+          ctx.fillStyle = '#c9ffe2'; ctx.font = '9px PixelArcade, monospace';
+          ctx.fillText('CLICK / SPACE TO START', W/2, H/2 + 30);
+        }
       } else {
-        ctx.fillStyle = '#ff6a6a';
-        ctx.fillText('GAME OVER', W/2, H/2 - 36);
-        ctx.font = '400 15px sans-serif';
-        ctx.fillStyle = '#cdeede';
-        ctx.fillText('Score: ' + score + '   Best: ' + best, W/2, H/2);
-        ctx.fillText('SPACE / CLICK to continue', W/2, H/2 + 28);
+        ctx.fillStyle = '#ff5d5d'; ctx.font = '20px PixelArcade, monospace';
+        ctx.fillText('GAME OVER', W/2, H/2 - 34);
+        ctx.fillStyle = '#c9ffe2'; ctx.font = '10px PixelArcade, monospace';
+        ctx.fillText('SCORE ' + score + '   BEST ' + best, W/2, H/2 + 2);
+        if (Math.floor(tick/20)%2 === 0) {
+          ctx.fillStyle = '#39ff8c'; ctx.font = '9px PixelArcade, monospace';
+          ctx.fillText('SPACE / CLICK = CONTINUE', W/2, H/2 + 34);
+        }
       }
     }
 
     function drawEnter() {
-      ctx.fillStyle = 'rgba(3,16,10,0.92)'; ctx.fillRect(0, 0, W, H);
+      panel(0.92);
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = '#f5c518'; ctx.font = '900 22px Trebuchet MS, sans-serif';
+      ctx.fillStyle = '#ffcf2e'; ctx.font = '15px PixelArcade, monospace';
       ctx.fillText('NEW HIGH SCORE!', W/2, 78);
-      ctx.fillStyle = '#cdeede'; ctx.font = '400 14px sans-serif';
-      ctx.fillText('Score: ' + score, W/2, 104);
-      ctx.fillStyle = '#62e29a'; ctx.font = '400 13px sans-serif';
-      ctx.fillText('ENTER YOUR INITIALS', W/2, 146);
+      ctx.fillStyle = '#c9ffe2'; ctx.font = '10px PixelArcade, monospace';
+      ctx.fillText('SCORE ' + score, W/2, 108);
+      ctx.fillStyle = '#39ff8c'; ctx.font = '9px PixelArcade, monospace';
+      ctx.fillText('ENTER YOUR INITIALS', W/2, 150);
       ctx.textBaseline = 'middle';
       for (let i = 0; i < 3; i++) {
         const x = W/2 - 60 + i*60;
-        ctx.fillStyle = i === entryPos ? '#2fc56f' : '#0d4631';
-        roundRect(x-22, 178, 44, 52, 6);
-        ctx.fillStyle = '#fff'; ctx.font = '900 30px Trebuchet MS, sans-serif';
-        ctx.fillText(entryName[i], x, 206);
+        ctx.fillStyle = i === entryPos ? '#1f9c5e' : '#0d3a33';
+        ctx.fillRect(x-22, 176, 44, 52);
+        ctx.fillStyle = i === entryPos ? '#39ff8c' : '#155047';
+        ctx.fillRect(x-22, 176, 44, 3);
+        ctx.fillStyle = '#fff'; ctx.font = '24px PixelArcade, monospace';
+        ctx.fillText(entryName[i], x, 204);
         if (i === entryPos && Math.floor(tick/20)%2 === 0) {
-          ctx.fillStyle = '#ffff44'; ctx.font = '14px sans-serif';
-          ctx.fillText('▲', x, 164); ctx.fillText('▼', x, 248);
+          ctx.fillStyle = '#ffcf2e'; ctx.font = '10px PixelArcade, monospace';
+          ctx.fillText('▲', x, 162); ctx.fillText('▼', x, 246);
         }
       }
-      ctx.fillStyle = '#8aa6a0'; ctx.font = '11px sans-serif'; ctx.textBaseline = 'alphabetic';
-      ctx.fillText('UP/DOWN = letter · LEFT/RIGHT = move · SPACE = OK', W/2, 300);
+      ctx.fillStyle = '#7e9a90'; ctx.font = '7px PixelArcade, monospace'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('UP/DOWN LETTER · L/R MOVE · SPACE OK', W/2, 300);
     }
 
     function drawScores() {
-      ctx.fillStyle = 'rgba(3,16,10,0.93)'; ctx.fillRect(0, 0, W, H);
+      panel(0.93);
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = '#2fc56f'; ctx.font = '900 24px Trebuchet MS, sans-serif';
+      ctx.fillStyle = '#39ff8c'; ctx.font = '16px PixelArcade, monospace';
       ctx.fillText('HALL OF FAME', W/2, 58);
-      ctx.font = '700 18px monospace';
+      ctx.font = '12px PixelArcade, monospace';
       scores.forEach((e, i) => {
         const y = 104 + i*44;
-        ctx.fillStyle = i === 0 ? '#f5c518' : '#cdeede';
-        ctx.fillText((i+1) + '.   ' + e.n + '   ' + String(e.s).padStart(5,'0'), W/2, y);
+        ctx.fillStyle = i === 0 ? '#ffcf2e' : '#c9ffe2';
+        ctx.fillText((i+1) + '.  ' + e.n + '   ' + String(e.s).padStart(5,'0'), W/2, y);
       });
       if (Math.floor(tick/20)%2 === 0) {
-        ctx.fillStyle = '#ffff44'; ctx.font = '700 14px sans-serif';
-        ctx.fillText('SPACE / CLICK to play again', W/2, H - 22);
+        ctx.fillStyle = '#39ff8c'; ctx.font = '9px PixelArcade, monospace';
+        ctx.fillText('SPACE / CLICK = PLAY AGAIN', W/2, H - 18);
       }
     }
 
-    function loop(now) {
+    // one fixed 60Hz step of PLAY physics (frame-rate independent)
+    function step() {
+      ball.vy += GRAVITY;
+      ball.y += ball.vy;
+      simTime += STEP;
+      if (simTime - lastPipe > PIPE_INTERVAL) { spawnPipe(); lastPipe = simTime; }
+      for (let p of pipes) {
+        p.x -= PIPE_SPEED;
+        p.coinX -= PIPE_SPEED;
+        if (!p.scored && p.x + PIPE_W < BALL_X) {
+          p.scored = true; score++;
+          scoreEl.textContent = score;
+          if (score > best) {
+            best = score; bestEl.textContent = best;
+            localStorage.setItem('sko_flappy_best', best);
+          }
+        }
+        if (p.hasCoin && !p.coinCollected) {
+          const dx = BALL_X - p.coinX, dy = (ball.y + HIT_OY) - p.coinY;
+          if (Math.sqrt(dx*dx + dy*dy) < HIT_RX + 10) {
+            p.coinCollected = true; coins++; coinsEl.textContent = coins;
+          }
+        }
+        if (collidesEllipse(p)) state = 'dead';
+      }
+      pipes = pipes.filter(p => p.x + PIPE_W > -10);
+      if (ball.y + HIT_RY + HIT_OY > H - GROUND || ball.y - HIT_RY + HIT_OY < 0) state = 'dead';
+    }
+
+    function loop(ts) {
       requestAnimationFrame(loop);
       tick++;
-      drawSky();
+      if (!lastTs) lastTs = ts;
+      // clamp so a long stall (tab hidden) can't fast-forward the whole game
+      acc += Math.min(ts - lastTs, 200);
+      lastTs = ts;
       if (state === 'playing') {
-        ball.vy += GRAVITY;
-        ball.y += ball.vy;
-        if (now - lastPipe > PIPE_INTERVAL) { spawnPipe(); lastPipe = now; }
-        for (let p of pipes) {
-          p.x -= PIPE_SPEED;
-          p.coinX -= PIPE_SPEED;
-          if (!p.scored && p.x + PIPE_W < BALL_X) {
-            p.scored = true; score++;
-            scoreEl.textContent = score;
-            if (score > best) {
-              best = score; bestEl.textContent = best;
-              localStorage.setItem('sko_flappy_best', best);
-            }
-          }
-          if (p.hasCoin && !p.coinCollected) {
-            const dx = BALL_X - p.coinX, dy = (ball.y + HIT_OY) - p.coinY;
-            if (Math.sqrt(dx*dx + dy*dy) < HIT_RX + 10) {
-              p.coinCollected = true;
-              coins++;
-              coinsEl.textContent = coins;
-            }
-          }
-          if (collidesEllipse(p)) state = 'dead';
-        }
-        pipes = pipes.filter(p => p.x + PIPE_W > -10);
-        if (ball.y + HIT_RY + HIT_OY > H - 40 || ball.y - HIT_RY + HIT_OY < 0) state = 'dead';
+        while (state === 'playing' && acc >= STEP) { acc -= STEP; step(); }
+      } else {
+        acc = 0;
       }
+      drawSky();
       for (let p of pipes) drawPipe(p);
       for (let p of pipes) drawCoin(p);
       drawAvatar();

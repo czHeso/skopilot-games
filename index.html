@@ -7,67 +7,82 @@
 <style>
   @font-face{ font-family:'PixelArcade'; src:url('assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
   :root{
-    --bg:#092725; --line:#1d4a44;
-    --sage:#7e9a90; --sage2:#a9c4ba; --teal:#34625b;
-    --white:#ffffff; --gold:#f5c518;
+    --bg:#040b09; --bg2:#081714; --line:#155047; --line2:#0c3329;
+    --green:#39ff8c; --green2:#1f9c5e; --sage:#7e9a90; --sage2:#a9c4ba; --teal:#34625b;
+    --white:#ffffff; --gold:#ffcf2e;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{height:100%;}
   body{background:var(--bg);color:var(--white);
     font-family:'PixelArcade','Courier New',monospace;
-    overflow:hidden;height:100vh;user-select:none;cursor:default;}
-  #fx{position:fixed;inset:0;z-index:0;pointer-events:none;}
+    overflow:hidden;height:100vh;user-select:none;cursor:default;
+    image-rendering:pixelated;}
+  img{image-rendering:pixelated;}
+
+  /* circuit-board backdrop (8bit asset) */
+  #bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(ellipse at 50% 36%, rgba(8,30,24,.30), rgba(4,11,9,.92) 78%),
+      url('assets/8bit/circuit.jpg') center/cover no-repeat;
+    opacity:.5;}
+  #fx{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.85;}
+
+  /* CRT scanlines + vignette */
   body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:40;
-    background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.12) 3px,rgba(0,0,0,0) 4px);}
+    background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);}
   body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:41;
-    background:radial-gradient(ellipse at 50% 42%, transparent 56%, rgba(0,0,0,.45) 100%);}
+    background:radial-gradient(ellipse at 50% 42%, transparent 54%, rgba(0,0,0,.55) 100%);}
 
   #screen{position:fixed;inset:0;z-index:3;display:flex;flex-direction:column;}
-  .topbar{padding:clamp(14px,3vh,34px) clamp(24px,4vw,64px) 0;}
-  .logo{height:clamp(58px,12vh,128px);width:auto;display:block;}
+  .topbar{padding:clamp(14px,3vh,34px) clamp(24px,4vw,64px) 0;
+    display:flex;align-items:center;gap:18px;}
+  .logo{height:clamp(58px,12vh,128px);width:auto;display:block;
+    filter:drop-shadow(0 0 10px rgba(57,255,140,.35));}
 
   .main{flex:1;display:flex;align-items:center;gap:clamp(18px,3vw,56px);
         padding:clamp(6px,1.6vh,20px) clamp(24px,4vw,64px);min-height:0;}
 
-  /* HRY (vlevo) */
+  /* GAMES (left) */
   #games{flex:1.5;min-width:0;display:flex;flex-direction:column;
     justify-content:center;gap:clamp(12px,2.6vh,30px);}
   .cat-head{display:flex;align-items:center;gap:10px;
-    font-size:clamp(9px,1.4vw,15px);color:var(--sage2);letter-spacing:3px;
-    margin-bottom:clamp(8px,1.3vh,13px);}
-  .cat-head::before{content:"";width:13px;height:13px;flex:0 0 auto;
-    background:linear-gradient(135deg,var(--sage2),var(--teal));clip-path:polygon(0 0,100% 0,70% 100%,0 100%);}
-  .cat-head::after{content:"";flex:1;height:2px;background:linear-gradient(90deg,var(--line),transparent);}
+    font-size:clamp(9px,1.4vw,15px);color:var(--green);letter-spacing:3px;
+    margin-bottom:clamp(8px,1.3vh,13px);text-shadow:0 0 8px rgba(57,255,140,.45);}
+  .cat-head::before{content:"";width:12px;height:12px;flex:0 0 auto;
+    background:var(--green);box-shadow:0 0 8px var(--green);
+    clip-path:polygon(0 0,100% 0,100% 100%,0 100%,0 60%,40% 60%,40% 40%,0 40%);}
+  .cat-head::after{content:"";flex:1;height:2px;
+    background:repeating-linear-gradient(90deg,var(--line) 0,var(--line) 6px,transparent 6px,transparent 12px);}
   .row{display:flex;flex-wrap:wrap;gap:clamp(12px,1.6vw,26px);}
 
   .card{width:clamp(140px,17vw,224px);display:flex;flex-direction:column;
-    cursor:pointer;transition:transform .14s;}
-  .frame{width:100%;aspect-ratio:4/3;position:relative;border-radius:11px;overflow:hidden;
+    cursor:pointer;transition:transform .12s;}
+  .frame{width:100%;aspect-ratio:4/3;position:relative;overflow:hidden;
     border:3px solid var(--line);
-    background:radial-gradient(125% 100% at 50% 0%, #103a33 0%, #0a2824 48%, #051b18 100%);
-    box-shadow:inset 0 0 0 2px var(--bg), 0 8px 18px rgba(0,0,0,.5);}
+    background:linear-gradient(180deg,#0c2a24 0%,#061d19 55%,#03110e 100%);
+    box-shadow:0 0 0 3px var(--bg), 0 0 0 5px var(--line2), 0 10px 0 rgba(0,0,0,.45);}
   .frame svg{display:block;width:100%;height:100%;}
   .frame::after{content:"";position:absolute;inset:0;pointer-events:none;
     background:
-      radial-gradient(130% 70% at 50% -12%, rgba(255,255,255,.10), transparent 58%),
-      repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.15) 3px,rgba(0,0,0,0) 4px);}
-  .cap{margin-top:10px;font-size:clamp(8px,1vw,12px);color:var(--sage);letter-spacing:1px;line-height:1.5;}
-  .genre{margin-top:5px;font-size:clamp(6px,.82vw,9px);color:var(--teal);letter-spacing:1px;}
-  .hi{margin-top:4px;font-size:clamp(6px,.82vw,9px);color:#3c5a52;letter-spacing:1px;}
+      radial-gradient(130% 70% at 50% -12%, rgba(57,255,140,.12), transparent 58%),
+      repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.18) 3px,rgba(0,0,0,0) 4px);}
+  .cap{margin-top:12px;font-size:clamp(8px,1vw,12px);color:var(--sage2);letter-spacing:1px;line-height:1.5;}
+  .genre{margin-top:6px;font-size:clamp(6px,.82vw,9px);color:var(--green2);letter-spacing:1px;}
+  .hi{margin-top:5px;font-size:clamp(6px,.82vw,9px);color:#3c5a52;letter-spacing:1px;}
 
   .card.sel{transform:translateY(-7px) scale(1.05);}
-  .card.sel .frame{border-color:var(--sage2);
-    box-shadow:inset 0 0 0 2px var(--bg),0 0 26px rgba(169,196,186,.55),0 8px 18px rgba(0,0,0,.5);}
-  .card.sel .cap{color:var(--sage2);}
+  .card.sel .frame{border-color:var(--green);
+    box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--green2),0 0 26px rgba(57,255,140,.6),0 10px 0 rgba(0,0,0,.45);}
+  .card.sel .cap{color:var(--green);text-shadow:0 0 8px rgba(57,255,140,.5);}
   .card.sel .hi{color:var(--gold);}
   .card.sel .frame::before{content:"\25B6 PLAY";position:absolute;z-index:3;left:50%;bottom:8px;
-    transform:translateX(-50%);background:var(--sage2);color:var(--bg);
-    font-size:clamp(7px,.95vw,11px);padding:4px 10px;border-radius:4px;letter-spacing:1px;
-    animation:blink .5s steps(1) infinite;}
+    transform:translateX(-50%);background:var(--green);color:var(--bg);
+    font-size:clamp(7px,.95vw,11px);padding:5px 11px;letter-spacing:1px;
+    box-shadow:0 0 12px rgba(57,255,140,.7);animation:blink .5s steps(1) infinite;}
   @keyframes blink{50%{opacity:0;}}
 
   .card.soon{cursor:not-allowed;}
-  .card.soon .frame{filter:saturate(.5) brightness(.78);}
+  .card.soon .frame{filter:saturate(.5) brightness(.7);}
   .card.soon .frame::before{content:"SOON";position:absolute;z-index:3;inset:0;
     display:flex;align-items:center;justify-content:center;
     font-size:clamp(16px,2.4vw,30px);color:var(--white);letter-spacing:4px;
@@ -76,35 +91,37 @@
     background:var(--gold);color:var(--bg);font-size:clamp(6px,.82vw,9px);
     letter-spacing:2px;padding:3px 34px;box-shadow:0 2px 6px rgba(0,0,0,.4);}
 
-  /* MASKOT (vpravo) */
+  /* MASCOT (right) */
   #hero{flex:1;min-width:0;align-self:stretch;position:relative;
     display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
     padding-bottom:clamp(6px,2vh,22px);}
-  .spot{position:absolute;left:50%;top:50%;transform:translate(-50%,-54%);
-    width:96%;height:88%;
-    background:radial-gradient(ellipse at center, rgba(169,196,186,.20), rgba(126,154,144,.05) 46%, transparent 70%);
-    filter:blur(3px);pointer-events:none;}
+  .spot{position:absolute;left:50%;top:50%;transform:translate(-50%,-52%);
+    width:78%;height:78%;
+    background:radial-gradient(ellipse at center, rgba(57,255,140,.18), rgba(31,156,94,.06) 46%, transparent 70%);
+    filter:blur(4px);pointer-events:none;}
   .mascot{position:relative;z-index:2;width:auto;
-    max-height:clamp(220px,56vh,560px);max-width:96%;
-    filter:drop-shadow(0 20px 16px rgba(0,0,0,.5));animation:bob 3.4s ease-in-out infinite;}
+    max-height:clamp(220px,60vh,600px);max-width:96%;
+    filter:drop-shadow(0 6px 0 rgba(0,0,0,.45)) drop-shadow(0 0 22px rgba(57,255,140,.4));
+    animation:bob 3.4s ease-in-out infinite;}
   @keyframes bob{50%{transform:translateY(-12px);}}
   .start{position:relative;z-index:2;margin-top:clamp(8px,1.6vh,16px);
-    font-size:clamp(12px,1.8vw,20px);color:var(--white);letter-spacing:3px;animation:blink 1.05s steps(1) infinite;}
+    font-size:clamp(12px,1.8vw,20px);color:var(--green);letter-spacing:3px;
+    text-shadow:0 0 10px rgba(57,255,140,.6);animation:blink 1.05s steps(1) infinite;}
 
   .foot{z-index:3;display:flex;flex-direction:column;gap:6px;align-items:center;
     padding:0 12px clamp(10px,2.2vh,22px);}
-  .hint{font-size:clamp(6px,1vw,10px);color:var(--teal);letter-spacing:1px;}
+  .hint{font-size:clamp(6px,1vw,10px);color:var(--green2);letter-spacing:1px;}
   .credit{font-size:clamp(6px,1vw,9px);color:#24514a;letter-spacing:1px;}
 
-  /* 4:3 automat */
+  /* 4:3 arcade cabinet */
   @media (min-aspect-ratio:1/1) and (max-aspect-ratio:3/2){
     .main{gap:clamp(14px,2.2vw,34px);}
     #games{flex:1.4;gap:clamp(10px,1.8vh,22px);}
     #hero{flex:.95;}
-    .mascot{max-height:clamp(190px,42vh,400px);}
+    .mascot{max-height:clamp(190px,46vh,440px);}
     .logo{height:clamp(50px,9vh,104px);}
   }
-  /* portrait monitor (na výšku) — maskot VEDLE her, vše seskupené víc na střed */
+  /* portrait monitor */
   @media (max-aspect-ratio:1/1){
     .main{justify-content:center; align-items:center;
           gap:clamp(16px,4vw,46px);
@@ -114,11 +131,11 @@
     .card{width:clamp(150px,26vw,264px);}
     .cat-head{font-size:clamp(11px,2.2vw,18px);}
     .cap{font-size:clamp(10px,1.7vw,14px);}
-    .mascot{max-height:clamp(300px,46vh,660px); max-width:46vw;}
+    .mascot{max-height:clamp(300px,48vh,680px); max-width:46vw;}
     .logo{height:clamp(76px,12vh,176px);}
     .topbar{display:flex; justify-content:center; padding-bottom:clamp(6px,1.5vh,16px);}
   }
-  /* velmi úzké displeje (telefon) — teprve tady skládej pod sebe */
+  /* phone */
   @media (max-width:600px){
     .main{flex-direction:column-reverse;gap:clamp(8px,2vh,18px);overflow-y:auto;}
     #hero{flex:0 0 auto;align-self:center;}
@@ -129,18 +146,19 @@
 </style>
 </head>
 <body>
+  <div id="bg"></div>
   <canvas id="fx"></canvas>
   <div id="screen">
     <div class="topbar">
-      <img class="logo" src="assets/logo_t.png"
-           onerror="this.onerror=null;this.src='assets/logo.png'" alt="ŠkoPilot Family">
+      <img class="logo" src="assets/8bit/8-bit-logo.png"
+           onerror="this.onerror=null;this.src='assets/logo_t.png'" alt="ŠkoPilot Family">
     </div>
     <div class="main">
       <div id="games"></div>
       <div id="hero">
         <div class="spot"></div>
-        <img class="mascot" src="assets/skopilot.png"
-             onerror="this.onerror=null;this.src='assets/skopilotHead.png'" alt="ŠkoPilot">
+        <img class="mascot" src="assets/skopilot_run.png"
+             onerror="this.onerror=null;this.src='assets/skopilot.png'" alt="ŠkoPilot">
         <div class="start">PUSH START</div>
       </div>
     </div>
@@ -154,36 +172,32 @@
   const HEAD='assets/skopilotHead.png';
 
   const ART = {
-    flappy:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
+    flappy:`<svg viewBox="0 0 160 120" preserveAspectRatio="none" shape-rendering="crispEdges">
       <rect y="108" width="160" height="12" fill="#0d2c1d"/>
-      <g fill="#2fc56f"><rect x="98" y="0" width="28" height="40"/><rect x="98" y="80" width="28" height="28"/></g>
+      <g fill="#39ff8c"><rect x="98" y="0" width="28" height="40"/><rect x="98" y="80" width="28" height="28"/></g>
       <g fill="#0d4631"><rect x="94" y="36" width="36" height="9"/><rect x="94" y="80" width="36" height="9"/></g>
-      <circle cx="140" cy="62" r="9" fill="#f5c518"/>
-      <text x="140" y="66" font-family="sans-serif" font-size="11" font-weight="bold" fill="#c8960a" text-anchor="middle">$</text>
+      <rect x="131" y="53" width="18" height="18" fill="#ffcf2e"/>
+      <text x="140" y="67" font-family="monospace" font-size="12" font-weight="bold" fill="#7a5c00" text-anchor="middle">$</text>
       <image href="${HEAD}" x="38" y="42" width="42" height="42"/></svg>`,
 
-    cliptris:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <rect x="52" y="6" width="56" height="108" fill="#08231f" stroke="#1d4a44" stroke-width="2"/>
+    cliptris:`<svg viewBox="0 0 160 120" preserveAspectRatio="none" shape-rendering="crispEdges">
+      <rect x="52" y="6" width="56" height="108" fill="#08231f" stroke="#155047" stroke-width="2"/>
       <g><rect x="54" y="92" width="18" height="18" fill="#7e9a90"/><rect x="72" y="92" width="18" height="18" fill="#34625b"/>
         <rect x="90" y="92" width="18" height="18" fill="#a9c4ba"/><rect x="54" y="74" width="18" height="18" fill="#34625b"/>
-        <rect x="90" y="74" width="18" height="18" fill="#f5c518"/><rect x="72" y="56" width="18" height="18" fill="#7e9a90"/>
+        <rect x="90" y="74" width="18" height="18" fill="#ffcf2e"/><rect x="72" y="56" width="18" height="18" fill="#7e9a90"/>
         <rect x="90" y="56" width="18" height="18" fill="#34625b"/></g>
-      <g fill="#a9c4ba"><rect x="72" y="14" width="18" height="18"/><rect x="72" y="32" width="18" height="18"/>
+      <g fill="#39ff8c"><rect x="72" y="14" width="18" height="18"/><rect x="72" y="32" width="18" height="18"/>
         <rect x="90" y="32" width="18" height="18"/></g></svg>`,
 
-    pro:`<svg viewBox="0 0 160 120" preserveAspectRatio="none">
-      <g fill="#0d4631"><rect x="6" y="104" width="148" height="10" rx="3"/><rect x="14" y="74" width="46" height="8" rx="3"/><rect x="104" y="62" width="50" height="8" rx="3"/></g>
-      <g fill="#2fc56f"><rect x="6" y="104" width="148" height="2"/><rect x="14" y="74" width="46" height="2"/><rect x="104" y="62" width="50" height="2"/></g>
-      <!-- tool -->
-      <g transform="translate(34,52)"><rect x="-9" y="-9" width="18" height="18" rx="4" fill="#f5c518"/>
-        <text x="0" y="2" font-family="sans-serif" font-size="8" font-weight="bold" fill="#5a4a00" text-anchor="middle">.py</text></g>
-      <!-- bug -->
-      <g transform="translate(78,92)"><rect x="-11" y="-9" width="22" height="18" rx="7" fill="#ff5d5d"/>
-        <circle cx="-4" cy="-2" r="2.4" fill="#fff"/><circle cx="4" cy="-2" r="2.4" fill="#fff"/></g>
-      <!-- chassis -->
+    pro:`<svg viewBox="0 0 160 120" preserveAspectRatio="none" shape-rendering="crispEdges">
+      <g fill="#0d4631"><rect x="6" y="104" width="148" height="10"/><rect x="14" y="74" width="46" height="8"/><rect x="104" y="62" width="50" height="8"/></g>
+      <g fill="#39ff8c"><rect x="6" y="104" width="148" height="2"/><rect x="14" y="74" width="46" height="2"/><rect x="104" y="62" width="50" height="2"/></g>
+      <g transform="translate(34,52)"><rect x="-9" y="-9" width="18" height="18" fill="#ffcf2e"/>
+        <text x="0" y="3" font-family="monospace" font-size="8" font-weight="bold" fill="#5a4a00" text-anchor="middle">.py</text></g>
+      <g transform="translate(78,92)"><rect x="-11" y="-9" width="22" height="18" fill="#ff5d5d"/>
+        <rect x="-6" y="-4" width="4" height="4" fill="#fff"/><rect x="2" y="-4" width="4" height="4" fill="#fff"/></g>
       <g transform="translate(118,40)" fill="none" stroke="#a9c4ba" stroke-width="2" stroke-dasharray="4 3">
-        <rect x="-13" y="2" width="26" height="20" rx="4"/><circle cx="0" cy="-3" r="7"/></g>
-      <!-- skopilot -->
+        <rect x="-13" y="2" width="26" height="20"/><rect x="-7" y="-10" width="14" height="14"/></g>
       <image href="${HEAD}" x="16" y="82" width="22" height="22"/></svg>`,
   };
 
@@ -245,19 +259,42 @@
     }
   });
 
-  // jemné stoupající jiskřičky
+  // ===== 8bit binary rain (matrix-style 0/1, ŠkoPilot green) =====
   const fx=document.getElementById('fx'), fc=fx.getContext('2d');
-  let parts=[];
-  function resizeFx(){ fx.width=innerWidth; fx.height=innerHeight; parts=[];
-    const n=Math.round(fx.width/30);
-    for(let i=0;i<n;i++) parts.push({x:Math.random()*fx.width,y:Math.random()*fx.height,
-      s:Math.random()<.2?2:1, v:0.12+Math.random()*0.45, a:0.15+Math.random()*0.4}); }
+  let cols=[], colW=16, fontPx=15;
+  function resizeFx(){
+    fx.width=innerWidth; fx.height=innerHeight;
+    fontPx=Math.max(12,Math.round(innerWidth/110));
+    colW=fontPx+2;
+    const n=Math.ceil(fx.width/colW);
+    cols=[];
+    for(let i=0;i<n;i++) cols.push({
+      y:Math.random()*fx.height,
+      sp:fontPx*(0.18+Math.random()*0.5),
+      len:6+(Math.random()*14|0),
+      bit:()=>Math.random()<0.5?'0':'1'
+    });
+  }
   addEventListener('resize', resizeFx); resizeFx();
+  fc.textBaseline='top';
   (function fxLoop(){ requestAnimationFrame(fxLoop);
     fc.clearRect(0,0,fx.width,fx.height);
-    for(const p of parts){ p.y-=p.v; if(p.y<-4){p.y=fx.height+4;p.x=Math.random()*fx.width;}
-      fc.globalAlpha=p.a; fc.fillStyle=p.s===2?'#a9c4ba':'#356057'; fc.fillRect(p.x|0,p.y|0,p.s,p.s); }
-    fc.globalAlpha=1; })();
+    fc.font=fontPx+'px PixelArcade, monospace';
+    for(let i=0;i<cols.length;i++){
+      const c=cols[i], x=i*colW;
+      for(let k=0;k<c.len;k++){
+        const yy=c.y-k*(fontPx+2);
+        if(yy<-fontPx||yy>fx.height) continue;
+        const head=k===0;
+        fc.globalAlpha=head?0.95:Math.max(0.04,0.5-k*0.04);
+        fc.fillStyle=head?'#c9ffe2':'#1f9c5e';
+        fc.fillText(((x+yy|0)%7)?'0':'1', x, yy);
+      }
+      c.y+=c.sp;
+      if(c.y-(c.len*(fontPx+2))>fx.height){ c.y=-(Math.random()*200); c.sp=fontPx*(0.18+Math.random()*0.5); }
+    }
+    fc.globalAlpha=1;
+  })();
 
   addEventListener('gamepadconnected', ()=>{ let prev=0;
     (function poll(){ const gp=navigator.getGamepads()[0];

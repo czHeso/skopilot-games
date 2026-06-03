@@ -82,13 +82,14 @@
 
     let gapQueue = [];
     function buildGapQueue() {
-      const big   = () => Math.floor(Math.random() * 20) + 180;
-      const mid   = () => Math.floor(Math.random() * 20) + 125;
-      const small = () => Math.floor(Math.random() * 15) + 90;
+      // Friendly gaps for casual players (50+) — never a tight hole.
+      const big   = () => Math.floor(Math.random() * 30) + 205;  // 205–234
+      const mid   = () => Math.floor(Math.random() * 25) + 175;  // 175–199
+      const comfy = () => Math.floor(Math.random() * 20) + 155;  // 155–174 (smallest possible)
       let arr;
-      if (score >= 20) arr = [mid(), small(), small(), small(), small()];
-      else if (score >= 10) arr = [mid(), mid(), mid(), small(), small()];
-      else arr = [big(), mid(), mid(), mid(), small()];
+      if (score >= 20)      arr = [mid(), comfy(), mid(), comfy(), mid()];
+      else if (score >= 10) arr = [big(), mid(), mid(), comfy(), mid()];
+      else                  arr = [big(), big(), mid(), big(), mid()];
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];

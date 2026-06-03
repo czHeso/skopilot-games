@@ -72,6 +72,8 @@ function enemySprite(kind){
   if(kind==='arm'||kind==='delay') return enemyImgs.machine;
   return enemyImgs.bug;   // syntax / legacy / default
 }
+const itemImgs={};
+['floppy','coffee','shield'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/items/'+k+'.png'; itemImgs[k]=im; });
 
 /* ===================== CONSTANTS ===================== */
 const GRAV=0.62, MAXV=13, SPEED=3.3, JUMP=-13.2, STEP=1000/60;
@@ -364,22 +366,42 @@ function drawPlatform(p){
 
 function drawTool(t){
   if(t.got) return;
-  ctx.save(); ctx.translate(t.x+11,t.y+11+Math.sin((tick+t.x)/18)*3);
-  ctx.shadowColor='#f5c518'; ctx.shadowBlur=10;
-  ctx.fillStyle='#f5c518'; rr(-11,-11,22,22,5); ctx.fill();
-  ctx.shadowBlur=0; ctx.fillStyle='#1a1300'; ctx.font='bold 9px PixelArcade, monospace';
-  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t.label,0,1);
-  ctx.restore();
+  const img=itemImgs.floppy, bob=Math.sin((tick+t.x)/18)*3;
+  if(img.complete && img.naturalWidth){
+    const dw=28, dh=dw*img.naturalHeight/img.naturalWidth;
+    const dx=t.x+t.w/2-dw/2, dy=t.y+t.h/2-dh/2+bob;
+    ctx.save(); ctx.shadowColor='#ffcf2e'; ctx.shadowBlur=8;
+    ctx.drawImage(img,dx,dy,dw,dh); ctx.restore();
+    // label printed on the floppy's cream sticker (~0.64 of height)
+    ctx.fillStyle='#5a4a00'; ctx.font='7px PixelArcade, monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(t.label, dx+dw/2, dy+dh*0.64);
+  } else {
+    ctx.save(); ctx.translate(t.x+11,t.y+11+bob);
+    ctx.fillStyle='#ffcf2e'; rr(-11,-11,22,22,5); ctx.fill();
+    ctx.fillStyle='#1a1300'; ctx.font='bold 9px PixelArcade, monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t.label,0,1);
+    ctx.restore();
+  }
 }
 
 function drawPowerup(pu){
   if(pu.got) return;
-  const y=pu.y+Math.sin((tick+pu.x)/16)*3;
-  ctx.save(); ctx.shadowColor=pu.type==='coffee'?'#ffae42':'#7dffb4'; ctx.shadowBlur=12;
-  ctx.fillStyle=pu.type==='coffee'?'#7a3b10':'#0e3a52'; rr(pu.x,y,pu.w,pu.h,6); ctx.fill();
-  ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.font='12px PixelArcade, monospace';
-  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(pu.type==='coffee'?'☕':'🛡',pu.x+pu.w/2,y+pu.h/2+1);
-  ctx.restore();
+  const img = pu.type==='coffee' ? itemImgs.coffee : itemImgs.shield;
+  const bob=Math.sin((tick+pu.x)/16)*3;
+  if(img.complete && img.naturalWidth){
+    const dw=pu.w+6, dh=dw*img.naturalHeight/img.naturalWidth;
+    const dx=pu.x+pu.w/2-dw/2, dy=pu.y+pu.h/2-dh/2+bob;
+    ctx.save(); ctx.shadowColor=pu.type==='coffee'?'#ffae42':'#9ec4ff'; ctx.shadowBlur=12;
+    ctx.drawImage(img,dx,dy,dw,dh); ctx.restore();
+  } else {
+    const y=pu.y+bob;
+    ctx.save(); ctx.shadowColor=pu.type==='coffee'?'#ffae42':'#7dffb4'; ctx.shadowBlur=12;
+    ctx.fillStyle=pu.type==='coffee'?'#7a3b10':'#0e3a52'; rr(pu.x,y,pu.w,pu.h,6); ctx.fill();
+    ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.font='12px PixelArcade, monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(pu.type==='coffee'?'C':'F',pu.x+pu.w/2,y+pu.h/2+1);
+    ctx.restore();
+  }
 }
 
 function drawChassis(){
@@ -454,10 +476,17 @@ function drawHUD(){
   const bw=200, bx=W/2-bw/2, by=24;
   ctx.fillStyle='#0d2c1d'; ctx.fillRect(bx,by,bw,4);
   ctx.fillStyle=timeLeft<10?'#ff5d5d':lvl.accent; ctx.fillRect(bx,by,bw*(timeLeft/lvl.time),4);
-  // powerup ikonky
+  // powerup ikonky (8bit sprity)
   let px=200+lives*16+14;
-  if(speedBoost>0){ ctx.fillStyle='#ffae42'; ctx.fillText('☕',px,15); px+=18; }
-  if(firewall>0){ ctx.fillStyle='#7dffb4'; ctx.fillText('🛡',px,15); }
+  if(speedBoost>0){
+    if(itemImgs.coffee.complete && itemImgs.coffee.naturalWidth) ctx.drawImage(itemImgs.coffee,px,3,15,15);
+    else { ctx.fillStyle='#ffae42'; ctx.fillText('C',px,15); }
+    px+=20;
+  }
+  if(firewall>0){
+    if(itemImgs.shield.complete && itemImgs.shield.naturalWidth) ctx.drawImage(itemImgs.shield,px,4,14,14);
+    else { ctx.fillStyle='#9ec4ff'; ctx.fillText('F',px,15); }
+  }
 }
 
 function center(t,y,col,size){ ctx.fillStyle=col; ctx.font=size+'px PixelArcade, monospace'; ctx.textAlign='center'; ctx.fillText(t,W/2,y); }

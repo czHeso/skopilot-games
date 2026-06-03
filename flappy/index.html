@@ -100,11 +100,12 @@
       return gapQueue.shift();
     }
 
-    // ŠkoPilot 8bit sprite (transparent PNG)
+    // ŠkoPilot 8bit head (transparent PNG)
     const sprite = new Image();
     let spriteReady = false;
     sprite.onload = () => { spriteReady = true; };
-    sprite.src = '../assets/skopilot_run.png';
+    sprite.onerror = () => { sprite.onerror = null; sprite.src = '../assets/skopilotHead.png'; };
+    sprite.src = '../assets/8bit/skopilot-head.png';
 
     let ball, pipes, coins, pipeCount, score, best, state, lastPipe, tick = 0;
     best = +localStorage.getItem('sko_flappy_best') || 0;
@@ -241,7 +242,7 @@
       ctx.translate(BALL_X, ball.y + HIT_OY);
       ctx.rotate(tilt);
       if (spriteReady) {
-        const sh = 52, sw = sh * sprite.width / sprite.height;
+        const sw = 52, sh = sw * sprite.height / sprite.width;
         ctx.drawImage(sprite, -sw/2, -sh/2, sw, sh);
       } else {
         ctx.fillStyle = '#39ff8c';

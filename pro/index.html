@@ -64,6 +64,14 @@ addEventListener('resize',fit); addEventListener('load',fit); fit();
 
 const headImg=new Image(); headImg.src='../assets/skopilotHead.png';
 const playerImg=new Image(); playerImg.src='../assets/skopilot_run.png';
+const enemyImgs={};
+['bug','machine','email','paper'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/enemies/'+k+'.png'; enemyImgs[k]=im; });
+function enemySprite(kind){
+  if(kind==='email') return enemyImgs.email;
+  if(kind==='paper') return enemyImgs.paper;
+  if(kind==='arm'||kind==='delay') return enemyImgs.machine;
+  return enemyImgs.bug;   // syntax / legacy / default
+}
 
 /* ===================== CONSTANTS ===================== */
 const GRAV=0.62, MAXV=13, SPEED=3.3, JUMP=-13.2, STEP=1000/60;
@@ -416,27 +424,17 @@ function drawPlayer(){
 
 function drawEnemy(e){
   if(!e.alive)return;
-  const x=e.x,y=e.y,cx=x+e.w/2;
-  if(e.kind==='email'){                       // HR: obálka
-    ctx.fillStyle='#e7eef6'; rr(x,y,e.w,e.h,3); ctx.fill();
-    ctx.strokeStyle='#9fb2c4'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.moveTo(x+1,y+2); ctx.lineTo(cx,y+e.h*0.6); ctx.lineTo(x+e.w-1,y+2); ctx.stroke();
-    eyesAt(cx,y+e.h-7,e);
-  } else if(e.kind==='paper'){                 // HR: papíry
-    ctx.fillStyle='#eef2f6'; rr(x,y,e.w,e.h,2); ctx.fill();
-    ctx.strokeStyle='#c2cdd8'; ctx.lineWidth=1;
-    for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(x+4,y+7+i*6); ctx.lineTo(x+e.w-4,y+7+i*6); ctx.stroke(); }
-    eyesAt(cx,y+e.h-6,e);
-  } else if(e.kind==='arm' || e.kind==='delay'){ // Factory: porouchaný stroj
-    ctx.fillStyle='#8a8f96'; rr(x,y,e.w,e.h,5); ctx.fill();
-    ctx.fillStyle='#5d6168'; ctx.fillRect(x+3,y+e.h-5,e.w-6,4);
-    ctx.fillStyle='#caa64a'; ctx.fillRect(x+3,y+3,3,3); ctx.fillRect(x+e.w-6,y+3,3,3);
-    eyesAt(cx,y+e.h/2,e);
-  } else {                                     // IT: syntax error bug
-    ctx.fillStyle='#ff5d5d'; rr(x,y,e.w,e.h,8); ctx.fill();
-    eyesAt(cx,y+11,e);
-    ctx.strokeStyle='#ff5d5d'; ctx.lineWidth=2;
-    for(const dx of [4,15,26]){ ctx.beginPath(); ctx.moveTo(x+dx,y+e.h); ctx.lineTo(x+dx-2,y+e.h+5); ctx.stroke(); }
+  const img=enemySprite(e.kind), cx=e.x+e.w/2;
+  if(img && img.complete && img.naturalWidth){
+    const dw=e.w+6, dh=dw*img.height/img.width, dx=cx-dw/2, dy=e.y+e.h-dh+2;
+    ctx.save();
+    if(e.vx<0){ ctx.translate(cx,0); ctx.scale(-1,1); ctx.translate(-cx,0); }
+    ctx.drawImage(img,dx,dy,dw,dh);
+    ctx.restore();
+  } else {                                     // fallback before sprites load
+    ctx.fillStyle = (e.kind==='email'||e.kind==='paper') ? '#e7eef6'
+                  : (e.kind==='arm'||e.kind==='delay') ? '#8a8f96' : '#ff5d5d';
+    rr(e.x,e.y,e.w,e.h,5); ctx.fill();
   }
 }
 

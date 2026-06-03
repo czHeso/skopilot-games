@@ -109,6 +109,9 @@
     sprite.src = '../assets/8bit/skopilot-head.png';
 
     let ball, pipes, coins, pipeCount, score, best, state, lastPipe, tick = 0;
+    // fixed-timestep simulation (frame-rate independent — no slow/fast on FPS dips)
+    const STEP = 1000 / 60;
+    let acc = 0, lastTs = 0, simTime = 0;
     best = +localStorage.getItem('sko_flappy_best') || 0;
     bestEl.textContent = best;
 
@@ -123,7 +126,7 @@
       ball = { y: H / 2, vy: 0 };
       pipes = [];
       score = 0; coins = 0; pipeCount = 0;
-      state = 'idle'; lastPipe = 0;
+      state = 'idle'; lastPipe = 0; simTime = 0; acc = 0;
       gapQueue = [];
       scoreEl.textContent = 0; coinsEl.textContent = 0;
     }
@@ -175,14 +178,14 @@
     function drawSky() {
       ctx.fillStyle = '#04100b';
       ctx.fillRect(0, 0, W, H - GROUND);
-      // faint binary rain
+      // faint binary rain (kept light for low-end hardware)
       ctx.font = '12px PixelArcade, monospace';
       ctx.textBaseline = 'top';
       ctx.textAlign = 'left';
-      for (let cx = 6; cx < W; cx += 26) {
+      for (let cx = 6; cx < W; cx += 34) {
         const colShift = (tick * (0.6 + (cx % 3) * 0.25)) % (H - GROUND + 60);
-        for (let k = 0; k < 6; k++) {
-          const yy = ((colShift + k * 30) % (H - GROUND + 60)) - 14;
+        for (let k = 0; k < 5; k++) {
+          const yy = ((colShift + k * 34) % (H - GROUND + 60)) - 14;
           if (yy < -12 || yy > H - GROUND) continue;
           ctx.globalAlpha = 0.06 + (k === 0 ? 0.05 : 0);
           ctx.fillStyle = k === 0 ? '#39ff8c' : '#1f9c5e';
@@ -337,36 +340,48 @@
       }
     }
 
-    function loop(now) {
+    // one fixed 60Hz step of PLAY physics (frame-rate independent)
+    function step() {
+      ball.vy += GRAVITY;
+      ball.y += ball.vy;
+      simTime += STEP;
+      if (simTime - lastPipe > PIPE_INTERVAL) { spawnPipe(); lastPipe = simTime; }
+      for (let p of pipes) {
+        p.x -= PIPE_SPEED;
+        p.coinX -= PIPE_SPEED;
+        if (!p.scored && p.x + PIPE_W < BALL_X) {
+          p.scored = true; score++;
+          scoreEl.textContent = score;
+          if (score > best) {
+            best = score; bestEl.textContent = best;
+            localStorage.setItem('sko_flappy_best', best);
+          }
+        }
+        if (p.hasCoin && !p.coinCollected) {
+          const dx = BALL_X - p.coinX, dy = (ball.y + HIT_OY) - p.coinY;
+          if (Math.sqrt(dx*dx + dy*dy) < HIT_RX + 10) {
+            p.coinCollected = true; coins++; coinsEl.textContent = coins;
+          }
+        }
+        if (collidesEllipse(p)) state = 'dead';
+      }
+      pipes = pipes.filter(p => p.x + PIPE_W > -10);
+      if (ball.y + HIT_RY + HIT_OY > H - GROUND || ball.y - HIT_RY + HIT_OY < 0) state = 'dead';
+    }
+
+    function loop(ts) {
       requestAnimationFrame(loop);
       tick++;
-      drawSky();
+      if (!lastTs) lastTs = ts;
+      // clamp so a long stall (tab hidden) can't fast-forward the whole game
+      acc += Math.min(ts - lastTs, 200);
+      lastTs = ts;
       if (state === 'playing') {
-        ball.vy += GRAVITY;
-        ball.y += ball.vy;
-        if (now - lastPipe > PIPE_INTERVAL) { spawnPipe(); lastPipe = now; }
-        for (let p of pipes) {
-          p.x -= PIPE_SPEED;
-          p.coinX -= PIPE_SPEED;
-          if (!p.scored && p.x + PIPE_W < BALL_X) {
-            p.scored = true; score++;
-            scoreEl.textContent = score;
-            if (score > best) {
-              best = score; bestEl.textContent = best;
-              localStorage.setItem('sko_flappy_best', best);
-            }
-          }
-          if (p.hasCoin && !p.coinCollected) {
-            const dx = BALL_X - p.coinX, dy = (ball.y + HIT_OY) - p.coinY;
-            if (Math.sqrt(dx*dx + dy*dy) < HIT_RX + 10) {
-              p.coinCollected = true; coins++; coinsEl.textContent = coins;
-            }
-          }
-          if (collidesEllipse(p)) state = 'dead';
-        }
-        pipes = pipes.filter(p => p.x + PIPE_W > -10);
-        if (ball.y + HIT_RY + HIT_OY > H - GROUND || ball.y - HIT_RY + HIT_OY < 0) state = 'dead';
+        while (state === 'playing' && acc >= STEP) { acc -= STEP; step(); }
+      } else {
+        acc = 0;
       }
+      drawSky();
       for (let p of pipes) drawPipe(p);
       for (let p of pipes) drawCoin(p);
       drawAvatar();

@@ -334,11 +334,6 @@ function drawPlant(x,y){
   for(const a of [-0.7,-0.2,0.3,0.8]){ ctx.save(); ctx.translate(x+13,y); ctx.rotate(a);
     ctx.beginPath(); ctx.ellipse(0,-22,7,22,0,0,7); ctx.fill(); ctx.restore(); }
 }
-function eyesAt(cx,cy,e){
-  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx-5,cy,3,0,7); ctx.arc(cx+5,cy,3,0,7); ctx.fill();
-  const d=e.vx>0?1:-1; ctx.fillStyle='#300';
-  ctx.beginPath(); ctx.arc(cx-5+d,cy,1.4,0,7); ctx.arc(cx+5+d,cy,1.4,0,7); ctx.fill();
-}
 
 function drawPlatform(p){
   const ground = p.y>=560;

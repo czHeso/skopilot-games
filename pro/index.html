@@ -74,6 +74,8 @@ function enemySprite(kind){
 }
 const itemImgs={};
 ['floppy','coffee','shield'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/items/'+k+'.png'; itemImgs[k]=im; });
+const bgImgs={};
+['it','factory','hr'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/bg/'+k+'.png'; bgImgs[k]=im; });
 
 /* ===================== CONSTANTS ===================== */
 const GRAV=0.62, MAXV=13, SPEED=3.3, JUMP=-13.2, STEP=1000/60;
@@ -262,79 +264,42 @@ function drawBgGrid(){
   for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
 }
 
-/* ----- THEMED BACKGROUNDS ----- */
+/* ----- THEMED 8BIT BACKGROUNDS (pre-rendered pixel art + light live layer) ----- */
 function drawLevelBg(){
-  ctx.fillStyle = lvl.theme==='factory' ? '#19130a' : lvl.theme==='hr' ? '#13201e' : '#08161c';
-  ctx.fillRect(0,0,W,H);
-  if(lvl.theme==='it') bgIT();
-  else if(lvl.theme==='factory') bgFactory();
-  else bgHR();
+  const img=bgImgs[lvl.theme];
+  if(img && img.complete && img.naturalWidth){ ctx.drawImage(img,0,0,W,H); }
+  else { ctx.fillStyle = lvl.theme==='factory' ? '#19130a' : lvl.theme==='hr' ? '#13201e' : '#08161c'; ctx.fillRect(0,0,W,H); }
+  if(lvl.theme==='it') fxIT();
+  else if(lvl.theme==='factory') fxFactory();
+  else fxHR();
 }
-function bgIT(){
-  for(const rx of [30,150,610,720]){
-    ctx.fillStyle='#0c2230'; ctx.fillRect(rx,110,86,410);
-    ctx.strokeStyle='#16384a'; ctx.lineWidth=2; ctx.strokeRect(rx,110,86,410);
-    for(let i=0;i<10;i++){ const y=120+i*39;
-      ctx.fillStyle='#0a2a38'; ctx.fillRect(rx+6,y,74,28);
-      for(let k=0;k<3;k++){ const on=(((tick>>3)+i+k+rx)%4)===0;
-        ctx.fillStyle=on?'#3dffa0':'#0f5b46'; ctx.fillRect(rx+10+k*9,y+6,5,5); }
-      ctx.fillStyle='#123b4a'; ctx.fillRect(rx+56,y+5,18,18);
-    }
+// IT: matrix binary rain drifting down
+function fxIT(){
+  ctx.fillStyle='rgba(61,255,160,0.10)'; ctx.font='13px PixelArcade, monospace';
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  for(let i=0;i<34;i++){ const x=(i*47)%W, y=((tick*1.3 + i*61)%600); ctx.fillText((i*7%2)?'1':'0', x, y); }
+}
+// Factory: crates riding the conveyor band
+function fxFactory(){
+  const cols=['#39ff8c','#9fb4d6','#caa64a'];
+  for(let i=0;i<3;i++){
+    let x=((i*300 - tick*0.9)%(W+120)); if(x<-120) x+=W+120;
+    const y=360, s=34;
+    ctx.fillStyle='#3a2e0c'; ctx.fillRect(x,y,s,s);
+    ctx.fillStyle=cols[i]; ctx.fillRect(x,y,s,4); ctx.fillRect(x,y,4,s);
+    ctx.fillStyle='#241c05'; ctx.fillRect(x+s-4,y,4,s); ctx.fillRect(x,y+s-4,s,4);
+    ctx.fillStyle='rgba(0,0,0,.45)'; ctx.font='7px PixelArcade,monospace'; ctx.textAlign='center';
+    ctx.fillText('SKODA', x+s/2, y+s/2+3);
   }
-  ctx.fillStyle='rgba(61,220,160,0.08)'; ctx.font='12px monospace'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-  for(let i=0;i<46;i++){ const x=(i*49)%W, y=((tick*1.6 + i*57)%560); ctx.fillText((i*7%2)?'1':'0', x, y); }
 }
-function bgFactory(){
-  for(let x=-40;x<W;x+=40){ ctx.fillStyle=(((x/40)|0)%2)?'#3a2e08':'#241c05';
-    ctx.beginPath();ctx.moveTo(x,70);ctx.lineTo(x+20,70);ctx.lineTo(x+40,86);ctx.lineTo(x+20,86);ctx.closePath();ctx.fill(); }
-  ctx.strokeStyle='#4a3c10'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(0,160); ctx.lineTo(W,160); ctx.stroke();
-  const cols=['#39ff8c','#9fb4d6','#d0d6dc'];
-  for(let i=0;i<3;i++){ let x=((i*300 - tick*0.7)%(W+160)); if(x<-160) x+=W+160; drawCar(x,160,cols[i]); }
-  drawRoboArm(700,90);
-}
-function drawCar(x,y,col){
-  ctx.fillStyle=col; rr(x,y-15,72,15,5); ctx.fill();
-  rr(x+16,y-29,40,16,5); ctx.fill();
-  ctx.fillStyle='rgba(8,24,20,.65)'; rr(x+20,y-26,32,11,3); ctx.fill();
-  ctx.fillStyle='#0c0c0c'; ctx.beginPath(); ctx.arc(x+16,y,7,0,7); ctx.arc(x+56,y,7,0,7); ctx.fill();
-  ctx.fillStyle='#444'; ctx.beginPath(); ctx.arc(x+16,y,3,0,7); ctx.arc(x+56,y,3,0,7); ctx.fill();
-  ctx.fillStyle='rgba(0,0,0,.5)'; ctx.font='7px PixelArcade,monospace'; ctx.textAlign='center'; ctx.fillText('SKODA',x+36,y-5);
-}
-function drawRoboArm(x,y){
-  const sw=Math.sin(tick/45)*22;
-  ctx.strokeStyle='#7a6a28'; ctx.lineWidth=8; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-46,y+58); ctx.lineTo(x-14+sw,y+118); ctx.stroke();
-  ctx.lineCap='butt';
-  ctx.fillStyle='#b59a3a'; ctx.fillRect(x-10,y-12,20,16);
-  ctx.fillStyle='#caa64a'; ctx.fillRect(x-22+sw,y+116,16,8);
-}
-function bgHR(){
-  ctx.fillStyle='#1d3a46'; ctx.fillRect(520,70,210,150);
-  ctx.strokeStyle='#2c5566'; ctx.lineWidth=2;
-  for(let i=1;i<8;i++){ ctx.beginPath(); ctx.moveTo(520,70+i*19); ctx.lineTo(730,70+i*19); ctx.stroke(); }
-  ctx.strokeStyle='#3c6678'; ctx.strokeRect(520,70,210,150);
-  drawDesk(120,250); drawPerson(150,196,'#7dffb4');
-  drawDesk(330,250); drawPerson(360,196,'#9fb4d6');
-  drawPlant(60,520);
-  ctx.fillStyle='rgba(238,246,244,0.14)';
-  for(let i=0;i<6;i++){ const x=((i*150 + tick*0.5)%W), y=110+((i*47)%70); ctx.fillRect(x,y,14,18); }
-}
-function drawDesk(x,y){
-  ctx.fillStyle='#3a2a1a'; ctx.fillRect(x,y+34,120,10);
-  ctx.fillStyle='#2a1e12'; ctx.fillRect(x+6,y+44,8,26); ctx.fillRect(x+106,y+44,8,26);
-  ctx.fillStyle='#0c1c24'; rr(x+44,y+10,40,26,3); ctx.fill();
-  ctx.fillStyle='#2c7a9a'; rr(x+47,y+13,34,20,2); ctx.fill();
-  ctx.fillStyle='#173a30'; ctx.fillRect(x+62,y+36,6,8);
-}
-function drawPerson(x,y,col){
-  ctx.fillStyle='#e9cfb0'; ctx.beginPath(); ctx.arc(x,y,9,0,7); ctx.fill();
-  ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(x-13,y+40); ctx.lineTo(x+13,y+40); ctx.lineTo(x+9,y+10); ctx.lineTo(x-9,y+10); ctx.closePath(); ctx.fill();
-}
-function drawPlant(x,y){
-  ctx.fillStyle='#5a3a1a'; rr(x,y,26,30,4); ctx.fill();
-  ctx.fillStyle='#2f7a4a';
-  for(const a of [-0.7,-0.2,0.3,0.8]){ ctx.save(); ctx.translate(x+13,y); ctx.rotate(a);
-    ctx.beginPath(); ctx.ellipse(0,-22,7,22,0,0,7); ctx.fill(); ctx.restore(); }
+// HR: papers floating across the office
+function fxHR(){
+  for(let i=0;i<6;i++){
+    const x=((i*150 + tick*0.6)%(W+30))-30, y=120+((i*53)%120)+Math.sin((tick+i*40)/40)*6;
+    ctx.fillStyle='rgba(238,246,244,0.20)'; ctx.fillRect(x,y,14,18);
+    ctx.fillStyle='rgba(120,150,160,0.30)';
+    ctx.fillRect(x+2,y+4,10,1); ctx.fillRect(x+2,y+8,10,1); ctx.fillRect(x+2,y+12,7,1);
+  }
 }
 
 function drawPlatform(p){

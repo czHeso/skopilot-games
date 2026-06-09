@@ -61,11 +61,21 @@
       display:flex; justify-content:space-between; margin:5px 0; }
     .top li b{ color:var(--gold); font-weight:normal; }
     .hint{ font-size:7px; line-height:1.7; color:var(--green2); letter-spacing:1px; }
+    #controlsHelp{
+      position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+      max-width:min(640px,70vw); max-height:24vh; width:auto; height:auto;
+      z-index:55; pointer-events:none; display:none;
+      border:2px solid var(--green2); background:rgba(4,11,9,.78); padding:6px;
+      box-shadow:0 0 0 2px var(--bg), 0 0 18px rgba(57,255,140,.28);
+      image-rendering:auto;
+    }
+    #controlsHelp.show{ display:block; }
   </style>
 </head>
 <body>
   <div id="bg"></div>
   <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
+  <img id="controlsHelp" src="../assets/controls.png" alt="ovládání" onerror="this.style.display='none'; this.dataset.missing='1'">
   <div id="stage">
     <div id="well">
       <canvas id="board" width="330" height="440"></canvas>
@@ -574,6 +584,8 @@
     else if (state === 'dead')   drawGameOver();
     else if (state === 'enter')  drawEnter();
     else if (state === 'scores') drawScores();
+    const help = document.getElementById('controlsHelp');
+    if (help && !help.dataset.missing) help.classList.toggle('show', state === 'idle');
   }
 
   function panel(alpha){ ctx.fillStyle = 'rgba(6,32,29,' + alpha + ')'; ctx.fillRect(0, 0, board.width, board.height); }

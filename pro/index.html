@@ -24,11 +24,21 @@
       border:2px solid #1f9c5e;padding:9px 14px;font-size:10px;letter-spacing:1px;
       cursor:pointer;font-family:inherit;box-shadow:0 0 0 2px #040b09, 0 0 14px rgba(57,255,140,.25);}
     #menuBtn:hover{background:#11331f;color:#39ff8c;}
+    #controlsHelp{
+      position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+      max-width:min(640px,70vw); max-height:24vh; width:auto; height:auto;
+      z-index:55; pointer-events:none; display:none;
+      border:2px solid #1f9c5e; background:rgba(4,11,9,.78); padding:6px;
+      box-shadow:0 0 0 2px #040b09, 0 0 18px rgba(57,255,140,.28);
+      image-rendering:auto;
+    }
+    #controlsHelp.show{display:block;}
   </style>
 </head>
 <body>
   <div id="bg"></div>
   <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
+  <img id="controlsHelp" src="../assets/controls.png" alt="ovládání" onerror="this.style.display='none'; this.dataset.missing='1'">
   <div id="stage"><canvas id="c" width="800" height="600"></canvas></div>
 <script>
 /* ===================== INPUT MANAGER (config) ===================== */
@@ -546,6 +556,8 @@ function loop(ts){
   else if(state==='gameover') drawGameOver();
   else if(state==='enter') drawEnter();
   else if(state==='scores') drawScores();
+  const help = document.getElementById('controlsHelp');
+  if (help && !help.dataset.missing) help.classList.toggle('show', state==='title');
 }
 loadLevel(0);        // ať lvl existuje pro případné kreslení
 initTitle();

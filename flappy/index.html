@@ -40,14 +40,18 @@
     }
     #menuBtn:hover{ background:#11331f; color:#39ff8c; }
     #controlsHelp{
-      position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
-      max-width:min(640px,70vw); max-height:24vh; width:auto; height:auto;
-      z-index:55; pointer-events:none; display:none;
-      border:2px solid #1f9c5e; background:rgba(4,11,9,.78); padding:6px;
-      box-shadow:0 0 0 2px #040b09, 0 0 18px rgba(57,255,140,.28);
+      position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+      width:auto; height:auto;
+      max-width:min(82vw,1200px); max-height:32vh;
+      z-index:40; pointer-events:none; display:none;
       image-rendering:auto;
+      filter:drop-shadow(0 8px 30px rgba(57,255,140,.5)) brightness(.95);
     }
-    #controlsHelp.show{ display:block; }
+    #controlsHelp.show{ display:block; animation:helpFade .4s ease-out both; }
+    @keyframes helpFade{
+      from{ opacity:0; transform:translate(-50%, 14px); }
+      to{ opacity:1; transform:translate(-50%, 0); }
+    }
   </style>
 </head>
 <body>

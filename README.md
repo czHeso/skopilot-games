@@ -6,11 +6,17 @@ Sbírka mini‑her s maskotem **ŠkoPilot**, připravená pro arkádový automat
 Vše je čisté HTML/JS/Canvas — žádný build, žádné závislosti. Stačí otevřít
 `index.html` v prohlížeči.
 
+> **Zajímavost:** Celý projekt běží offline a bez jakéhokoli frameworku.
+> Jediné externě načítané assety jsou Google Fonty — ale i ty jsou přibalené
+> lokálně, takže kiosk funguje i na místech bez internetu (továrna, výstava, sklad).
+
 Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený do kategorií:
 
 - **ŠkoPilot** — *Flappy ŠkoPilot*
 - **ŠkoPilot Clip** — *ŠkoPilot Clip* (Tetris na čas) — hratelné
 - **ŠkoPilot Pro** — *Agent Builder* (plošinovka) — hratelné
+
+---
 
 ## Co je uvnitř
 
@@ -21,28 +27,70 @@ Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený d
 | `clip/` | **ŠkoPilot Clip** | Tetris na čas | šipky = posun, **↑/X** = rotace, Mezerník = hard drop |
 | `pro/` | **ŠkoPilot Pro** | plošinovka, stavba agenta | šipky/joystick + skok, **X** = výstřel |
 
+---
+
+### Flappy ŠkoPilot
+
+Klasická Flappy Bird mechanika v kabátě ŠkoPilota. Pípnutí mezerníku (nebo klik)
+drží maskota ve vzduchu — bez toho padá. Mezery mezi překážkami se náhodně generují,
+takže každá hra je jiná. Skóre se uloží do `localStorage` a zobrazí se na úvodní
+obrazovce hry.
+
+> **Tip:** Na arkádovém automatu je nejpříjemnější hrát s tlačítkem 1 (Mezerník).
+> Rychlé krátké tapnutí funguje lépe než držení.
+
+---
+
 ### ŠkoPilot Clip — Tetris na čas
+
 Dole je předem napsané slovo **CLIP** pixel grafikou — každá buňka jiný
 **odstín žluté**. Cílem je nápis **co nejrychleji zničit**: padají tetromina a
 když spojíš celý řádek, zmizí (klasicky jako Tetris) a s ním i kousek nápisu.
-Občas (**fakt malá šance**) spadne místo dílu **bomba**, která vybuchne a zničí
-**3×3** kolem dopadu. V bočním panelu vidíš **další padající díl**, aktuální
-**čas** a **síň slávy nejrychlejších časů** (čím méně, tím líp). Ovládání je
-nahoře v souboru přehledně v `keydown` — snadno upravíš pro USB enkodér.
+
+Občas (**fakt malá šance**) spadne místo dílu **bomba 💣**, která vybuchne a zničí
+**3×3** kolem dopadu. V bočním panelu vidíš:
+
+- **Náhled** dalšího padajícího dílu
+- Aktuální **čas** (čím méně, tím líp)
+- **Síň slávy nejrychlejších časů**
+
+Ovládání je nahoře v souboru přehledně v `keydown` — snadno upravíš pro USB enkodér.
+
+> **Zajímavost:** Pixel font nápisu CLIP je ručně nakódovaný jako 2D pole jedniček
+> a nul přímo v JS — žádný sprite sheet, žádný obrázek. Každý pixel je jeden blok herního pole.
+
+---
 
 ### ŠkoPilot Pro — Agent Builder
-V mladoboleslavském cloudu spadly moduly. ŠkoPilot probíhá 3 levely (IT&Dev →
-Výroba → HR), sbírá ztracené **tooly** a na konci levelu z nich u „šasi"
-sestaví **AI Agenta**. Má časový limit (**Server Timeout**), bugy (nepřátele),
-power‑upy (☕ zrychlení, 🛡 firewall) a arkádovou **síň slávy** se zadáváním
-3 písmen jména. Rozlišení 4:3 (800×600), škáluje se na celou obrazovku.
-Mapování kláves je nahoře v souboru v `KEYMAP` (Input Manager) — snadno upravíš
-pro svůj USB enkodér.
 
-Všechny hry:
-- jdou **přes celou obrazovku** (automaticky se přizpůsobí poměru displeje),
-- **ESC** kdykoliv vrátí do menu, vlevo nahoře je i tlačítko **◀ MENU**,
-- ukládají nejlepší skóre do prohlížeče (`localStorage`).
+V mladoboleslavském cloudu spadly moduly. ŠkoPilot probíhá **3 levely** (IT&Dev →
+Výroba → HR), sbírá ztracené **tooly** a na konci levelu z nich u „šasi"
+sestaví **AI Agenta**.
+
+Herní mechaniky:
+- **Časový limit** — Server Timeout odpočítává, spěchej!
+- **Bugy** — nepřátelé, kterým se musíš vyhnout nebo je zničit výstřelem
+- **Power‑upy** — ☕ zrychlení pohybu, 🛡 firewall (dočasná nezranitelnost)
+- **Síň slávy** — arkádové zadávání 3 písmen jména (klasika!)
+
+Technické detaily:
+- Rozlišení **4:3 (800×600)**, automaticky škáluje na celou obrazovku
+- Mapování kláves je nahoře v souboru v `KEYMAP` (Input Manager) — snadno upravíš pro USB enkodér
+- Kolize jsou řešeny AABB (Axis‑Aligned Bounding Box) — rychlé, spolehlivé, bez závislostí
+
+> **Zajímavost:** Celý herní engine (fyzika, render loop, správa entit, input) je
+> napsaný v ~600 řádcích vanilla JS. Žádný Phaser, žádný PixiJS.
+
+---
+
+### Společné vlastnosti všech her
+
+- Jdou **přes celou obrazovku** (automaticky se přizpůsobí poměru displeje)
+- **ESC** kdykoliv vrátí do menu, vlevo nahoře je i tlačítko **◀ MENU**
+- Ukládají nejlepší skóre do prohlížeče (`localStorage`)
+- Fungují v **Chromiu bez internetu** — vhodné pro kiosky a výstavní stánky
+
+---
 
 ## Avatar maskota
 
@@ -102,6 +150,10 @@ sudo apt install -y chromium-browser unclutter
 Mělo by se otevřít menu na celou obrazovku. Kiosk ukončíš `Alt+F4`
 (nebo `Ctrl+W`).
 
+> **Proč Chromium?** Chromium v kiosk módu (`--kiosk`) zakáže adresní lištu,
+> kontextové menu i klávesové zkratky prohlížeče. Uživatel vidí jen hru —
+> přesně jako u skutečného arkádového automatu.
+
 ---
 
 ## ⏯️ Autostart úvodní obrazovky po zapnutí
@@ -159,6 +211,11 @@ s tímto výchozím rozložením:
 | Joystick ←/→/↑/↓ | šipky | pohyb / výběr v menu |
 | Tlačítko 1 | Mezerník | skok / palba / start |
 | Tlačítko 2 | Enter | potvrzení v menu |
+| Tlačítko 3 | X | rotace (Clip) / výstřel (Pro) |
+
+> **Jak funguje USB enkodér?** Raspberry Pi ho vidí jako standardní HID klávesnici.
+> Není potřeba žádný ovladač — zapojíš, přiřadíš klávesy v enkodéru a hraješ.
+> Zero Delay enkodéry mají odezvu pod 1 ms, takže latence je zcela zanedbatelná.
 
 > Enkodéry se obvykle dají přemapovat ve svém configu. Když máš joystick na
 > jiných klávesách, hry rozumí i `WASD`.
@@ -173,6 +230,32 @@ s tímto výchozím rozložením:
   to sedí samo. Pokud testuješ v okně, roztáhni ho na celou plochu.
 - **Obrazovka po chvíli zhasne:** dokonči krok A (Screen Blanking → No).
 - **Aktualizace her:** `cd ~/skopilot-games && git pull`, pak restart.
+- **Hra sekne nebo padá:** zkus `chromium-browser --disable-gpu index.html` —
+  na některých Pi 4 se GPU acceleration chová nestabilně pod Waylandem.
+
+---
+
+## 📐 Technická architektura (pro vývojáře)
+
+```
+skopilot-games/
+├── index.html          # Arcade launcher (výběr her)
+├── start-arcade.sh     # Spouštěcí skript pro Raspberry Pi (kiosk mód)
+├── assets/
+│   ├── fonts/          # Press Start 2P (offline pixel font)
+│   ├── skopilot.png    # Maskot (celé tělo)
+│   └── skopilotHead.png# Maskot (hlava, fallback)
+├── flappy/
+│   └── index.html      # Celá hra v jednom souboru (~300 řádků JS)
+├── clip/
+│   └── index.html      # Tetris na čas (~500 řádků JS)
+└── pro/
+    └── index.html      # Plošinovka Agent Builder (~600 řádků JS)
+```
+
+Každá hra je **jeden samostatný HTML soubor** — žádné importy, žádné moduly,
+žádný bundler. To zaručuje, že hra poběží kdekoliv: v Chromiu, Firefoxu,
+i na starém tabletu.
 
 ---
 

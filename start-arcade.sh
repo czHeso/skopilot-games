@@ -129,11 +129,11 @@ if command -v amixer >/dev/null 2>&1; then
   log "hlasitost nastavena na maximum (amixer)"
 fi
 
-# Softwarový boost nad 100 % systémové hlasitosti. 3.0 = 3× (+9,5 dB).
+# Softwarový boost nad 100 % systémové hlasitosti. 4.0 = 4× (+12 dB).
 # Hardware je na maximu, tak se signál zesílí už v přehrávači. Při vyšších
 # hodnotách může zvuk „řezat" (clipping) — pak hodnotu sniž, např.:
 #   SKOPILOT_MUSIC_BOOST=2.0 ~/skopilot-games/start-arcade.sh
-BOOST="${SKOPILOT_MUSIC_BOOST:-3.0}"
+BOOST="${SKOPILOT_MUSIC_BOOST:-4.0}"
 
 if [ -f "$MUSIC" ]; then
   # Vyber dostupný přehrávač a pusť ho v nekonečné smyčce.

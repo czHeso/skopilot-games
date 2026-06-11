@@ -8,6 +8,14 @@ set -e
 APP_DIR="$HOME/skopilot-games"
 URL="file://$APP_DIR/index.html"
 
+# ── Debug log ───────────────────────────────────────────────────────
+# Každý start zapíše průběh do ~/skopilot-arcade.log — když kiosk
+# nenaběhne přes celou obrazovku, podívej se sem: tail ~/skopilot-arcade.log
+LOG="$HOME/skopilot-arcade.log"
+: > "$LOG"
+log(){ echo "[$(date '+%H:%M:%S')] $*" >> "$LOG"; }
+log "start; session=${XDG_SESSION_TYPE:-?} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-} DISPLAY=${DISPLAY:-}"
+
 # Najdi binárku Chromia (na Bookworm bývá 'chromium', na starších 'chromium-browser')
 if command -v chromium >/dev/null 2>&1; then
   BROWSER=chromium
@@ -21,21 +29,36 @@ fi
 # ── Počkej na grafické prostředí ────────────────────────────────────
 # Autostart se často spustí dřív, než kompozitor nastaví rozlišení displeje.
 # Chromium by pak naběhl v malém okně vlevo nahoře místo celé obrazovky.
+WAITED=0
 for _ in $(seq 1 30); do
   if [ -n "${WAYLAND_DISPLAY:-}" ] || [ -n "${DISPLAY:-}" ]; then break; fi
-  sleep 1
+  sleep 1; WAITED=$((WAITED+1))
 done
 sleep 4   # dej kompozitoru čas dokončit nastavení výstupu
+log "graphics ready (waited ${WAITED}s + 4s grace)"
 
-# Zjisti skutečné rozlišení displeje z DRM (funguje na X11 i Waylandu);
-# Chromium pak dostane správnou velikost okna i kdyby fullscreen selhal.
-RES="$(cat /sys/class/drm/card*-*/modes 2>/dev/null | head -n 1 || true)"
+# Zjisti LOGICKÉ rozlišení obrazovky (zahrnuje i otočení displeje).
+# Pořadí: xrandr (X11/XWayland) → wlr-randr (Wayland) → DRM → 1920x1080.
+RES=""
+if [ -n "${DISPLAY:-}" ] && command -v xrandr >/dev/null 2>&1; then
+  RES="$(xrandr --current 2>/dev/null | sed -n 's/.*current \([0-9]\{2,\}\) x \([0-9]\{2,\}\).*/\1x\2/p' | head -n 1 || true)"
+  [ -n "$RES" ] && log "resolution via xrandr: $RES"
+fi
+if [ -z "$RES" ] && command -v wlr-randr >/dev/null 2>&1; then
+  RES="$(wlr-randr 2>/dev/null | sed -n 's/^ *\([0-9]\{2,\}x[0-9]\{2,\}\) px.*current.*/\1/p' | head -n 1 || true)"
+  [ -n "$RES" ] && log "resolution via wlr-randr: $RES"
+fi
+if [ -z "$RES" ]; then
+  RES="$(cat /sys/class/drm/card*-*/modes 2>/dev/null | head -n 1 || true)"
+  [ -n "$RES" ] && log "resolution via DRM (pozor: nezná otočení): $RES"
+fi
 case "$RES" in
   *x*) : ;;
-  *)   RES="1920x1080" ;;
+  *)   RES="1920x1080"; log "resolution fallback: $RES" ;;
 esac
 SCR_W="${RES%%x*}"
 SCR_H="${RES##*x}"
+log "using window size ${SCR_W}x${SCR_H}"
 
 # Vypni šetřič / blank obrazovky (pod X11; pod Waylandem řeš v raspi-config)
 xset s off      2>/dev/null || true
@@ -75,12 +98,13 @@ fi
 PREF="$HOME/.config/chromium/Default/Preferences"
 [ -f "$PREF" ] && sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/' "$PREF" || true
 
+log "launching $BROWSER"
 exec "$BROWSER" \
   --kiosk \
   --start-fullscreen \
-  --start-maximized \
   --window-position=0,0 \
   --window-size="${SCR_W},${SCR_H}" \
+  --ozone-platform-hint=auto \
   --noerrordialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \

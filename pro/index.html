@@ -82,7 +82,7 @@ addEventListener('keydown',e=>{
     }
   }
   if(state==='scores' && e.key==='Delete'){
-    if(!delConfirm && scoreSel>=0){ delConfirm=true; delYes=false; }
+    if(!delConfirm){ if(manage) activateManage(); else enterManage(); }
     return;
   }
   if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
@@ -177,18 +177,25 @@ function cycleChar(dir){
   entryName[entryPos]=NAME_CHARS[(i+dir+NAME_CHARS.length)%NAME_CHARS.length];
 }
 
-/* správa síně slávy (výběr + mazání rekordů) */
-let scoreSel=-1, delConfirm=false, delYes=false;
-function scItems(){ return scores.length ? scores.length+1 : 0; }  // záznamy + DELETE ALL
-function openScores(){ scoreSel=-1; delConfirm=false; state='scores'; }
+/* správa síně slávy: podmenu MANAGE RECORDS (smazat jeden / smazat vše) */
+let scoreSel=-1, delConfirm=false, delYes=false, manage=false;
+/* řádky: hlavní pohled = záznamy + MANAGE; manage = záznamy + DELETE ALL + BACK */
+function scRows(){ return manage ? scores.length+2 : scores.length+1; }
+function openScores(){ scoreSel=-1; delConfirm=false; manage=false; state='scores'; }
+function enterManage(){ manage=true; delConfirm=false; scoreSel=scores.length?0:1; }
+function activateManage(){
+  if(scoreSel===scores.length+1){ manage=false; scoreSel=-1; }   // BACK
+  else if(scoreSel>=0){ delConfirm=true; delYes=false; }         // záznam / DELETE ALL
+}
 function doDelete(){
-  if(scoreSel===scores.length){               // DELETE ALL RECORDS
+  if(scoreSel===scores.length){               // DELETE ALL
     scores=[]; saveScores(scores);
     best=0; localStorage.removeItem('sko_pro_best');
+    scoreSel=1;                               // skoč na BACK
   } else if(scoreSel>=0 && scoreSel<scores.length){
     scores.splice(scoreSel,1); saveScores(scores);
   }
-  if(scoreSel>=scItems()) scoreSel=scItems()-1;
+  if(scoreSel>scores.length+1) scoreSel=scores.length+1;
 }
 
 function loadLevel(i){
@@ -316,20 +323,23 @@ function updateEnter(){
   }
 }
 
-/* ----- HALL OF FAME (výběr + mazání) ----- */
+/* ----- HALL OF FAME (MANAGE RECORDS podmenu) ----- */
 function updateScores(){
   if(delConfirm){
     if(consume('left')||consume('right')) delYes=!delYes;
     if(consume('shoot')||consume('start')){ if(delYes) doDelete(); delConfirm=false; }
     return;
   }
-  const items=scItems();
-  if(items){
+  if(manage){
+    const items=scores.length+2;
     if(consume('down')) scoreSel=(scoreSel+1)%items;
     if(consume('up')) scoreSel=(scoreSel<=0?items:scoreSel)-1;
-    if(consume('shoot')){ if(scoreSel>=0){ delConfirm=true; delYes=false; } }
+    if(consume('shoot')||consume('start')) activateManage();
+    return;
   }
-  if(consume('start')) initTitle();
+  if(consume('up')||consume('down')) scoreSel = scoreSel===scores.length ? -1 : scores.length;
+  if(consume('shoot')) enterManage();
+  if(consume('start')){ if(scoreSel===scores.length) enterManage(); else initTitle(); }
 }
 
 /* ===================== RENDER ===================== */
@@ -587,13 +597,24 @@ function drawEnter(){
 }
 
 const SC={ rowY0:190, rowH:48, rowW:560, cfW:460, cfH:150, btnW:120, btnH:40 };
+function actionRow(idx, label, danger){
+  const cy=SC.rowY0+idx*SC.rowH, sel=idx===scoreSel;
+  if(sel){
+    ctx.fillStyle = danger ? '#3a0f12' : '#0d3a33';
+    ctx.fillRect(W/2-SC.rowW/2, cy-SC.rowH/2+4, SC.rowW, SC.rowH-8);
+  }
+  ctx.fillStyle = sel ? (danger?'#ff5d5d':'#39ff8c') : (danger?'#7e4a4a':'#7e9a90');
+  ctx.font='12px PixelArcade, monospace';
+  ctx.fillText(label, W/2, cy);
+}
+
 function drawScores(){
   drawBgGrid();
-  center('HALL OF FAME', 110, '#39ff8c', 24);
+  center(manage?'MANAGE RECORDS':'HALL OF FAME', 110, manage?'#f5c518':'#39ff8c', 24);
   ctx.textBaseline='middle';
   scores.forEach((e,i)=>{
     const cy=SC.rowY0+i*SC.rowH;
-    if(i===scoreSel){
+    if(manage && i===scoreSel){
       ctx.fillStyle='#0d3a33'; ctx.fillRect(W/2-SC.rowW/2, cy-SC.rowH/2+4, SC.rowW, SC.rowH-8);
       ctx.fillStyle='#ff5d5d'; ctx.font='14px PixelArcade, monospace';
       ctx.textAlign='right'; ctx.fillText('✖', W/2+SC.rowW/2-16, cy);
@@ -603,22 +624,25 @@ function drawScores(){
     ctx.fillText((i+1)+'. '+e.n.padEnd(NAME_LEN)+' '+String(e.s).padStart(6,'0'), W/2, cy);
   });
   ctx.textAlign='center';
+  if(manage){
+    actionRow(scores.length, 'DELETE ALL', true);
+    actionRow(scores.length+1, 'BACK', false);
+  } else {
+    actionRow(scores.length, 'MANAGE RECORDS', false);
+  }
   if(!scores.length){
     ctx.fillStyle='#3c5a52'; ctx.font='12px PixelArcade, monospace';
-    ctx.fillText('NO RECORDS', W/2, SC.rowY0+SC.rowH);
-  } else {
-    const cy=SC.rowY0+scores.length*SC.rowH;
-    if(scoreSel===scores.length){
-      ctx.fillStyle='#3a0f12'; ctx.fillRect(W/2-SC.rowW/2, cy-SC.rowH/2+4, SC.rowW, SC.rowH-8);
-    }
-    ctx.fillStyle=scoreSel===scores.length?'#ff5d5d':'#7e4a4a';
-    ctx.font='12px PixelArcade, monospace';
-    ctx.fillText('DELETE ALL RECORDS', W/2, cy);
+    ctx.fillText('NO RECORDS', W/2, SC.rowY0+(manage?3:2)*SC.rowH);
   }
   ctx.textBaseline='alphabetic';
-  ctx.fillStyle='#3c5a52'; ctx.font='9px PixelArcade, monospace';
-  ctx.fillText('JOY ↑↓ / MOUSE = SELECT · X / DEL = DELETE', W/2, 488);
-  if(Math.floor(tick/30)%2===0) center('PUSH START', 530, '#ffff44', 14);
+  if(manage){
+    ctx.fillStyle='#3c5a52'; ctx.font='9px PixelArcade, monospace';
+    ctx.fillText('JOY ↑↓ / MOUSE = SELECT · X / START = OK', W/2, 540);
+  } else {
+    ctx.fillStyle='#3c5a52'; ctx.font='9px PixelArcade, monospace';
+    ctx.fillText('X / CLICK = MANAGE RECORDS', W/2, 488);
+    if(Math.floor(tick/30)%2===0) center('PUSH START', 530, '#ffff44', 14);
+  }
   if(delConfirm) drawDelConfirm();
 }
 
@@ -651,9 +675,12 @@ function canvasPos(e){
 }
 function scoresRowAt(x,y){
   if(Math.abs(x-W/2)>SC.rowW/2) return -1;
-  for(let i=0;i<scItems();i++){
+  for(let i=0;i<scRows();i++){
     const cy=SC.rowY0+i*SC.rowH;
-    if(y>cy-SC.rowH/2 && y<cy+SC.rowH/2) return i;
+    if(y>cy-SC.rowH/2 && y<cy+SC.rowH/2){
+      if(!manage && i!==scores.length) return -1;   // hlavní pohled: klikací je jen MANAGE
+      return i;
+    }
   }
   return -1;
 }
@@ -667,7 +694,9 @@ function confirmHit(x,y){
 canvas.addEventListener('mousemove',e=>{
   if(state!=='scores'||delConfirm) return;
   const p=canvasPos(e);
-  scoreSel=scoresRowAt(p.x,p.y);
+  const row=scoresRowAt(p.x,p.y);
+  if(manage){ if(row>=0) scoreSel=row; }
+  else scoreSel=row;
 });
 canvas.addEventListener('click',e=>{
   if(state!=='scores') return;
@@ -678,7 +707,11 @@ canvas.addEventListener('click',e=>{
     return;
   }
   const row=scoresRowAt(p.x,p.y);
-  if(row>=0){ scoreSel=row; delConfirm=true; delYes=false; }
+  if(!manage){
+    if(row===scores.length) enterManage();
+    return;
+  }
+  if(row>=0){ scoreSel=row; activateManage(); }
 });
 
 function drawScene(){

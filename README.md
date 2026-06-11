@@ -98,10 +98,11 @@ Technické detaily:
   necháš prázdné.
 - **Vstup do síně slávy:** na úvodní obrazovce každé hry zatlač **joystick
   nahoru (↑)**.
-- **Mazání rekordů:** v síni slávy vyber záznam šipkami ↑/↓ a stiskni **X**
-  (nebo Delete), potvrdíš volbou **YES/NO**. Stejně funguje i **myš** — najetím
-  záznam označíš, kliknutím smažeš. Úplně dole je položka **DELETE ALL
-  RECORDS**, která smaže celou tabulku včetně uloženého BEST skóre.
+- **Mazání rekordů:** dole v síni slávy je položka **MANAGE RECORDS** —
+  otevřeš ji tlačítkem **X** (nebo kliknutím myší). Uvnitř vybereš šipkami
+  ↑/↓ (nebo najetím myší) **jednotlivý záznam** a smažeš ho přes X/Enter/klik
+  s potvrzením **YES/NO**. K dispozici je i **DELETE ALL** (smaže celou
+  tabulku včetně uloženého BEST skóre) a **BACK** pro návrat.
 
 #### Obrázky s ovládáním (controls)
 
@@ -252,6 +253,11 @@ s tímto výchozím rozložením:
 
 - **Černá obrazovka / menu nenaskočí:** zkontroluj cestu v `Exec=` v souboru
   `~/.config/autostart/skopilot.desktop` (musí sedět tvoje uživatelské jméno).
+- **Hra po startu naběhne v malém okně vlevo nahoře:** autostart spustil
+  Chromium dřív, než kompozitor nastavil rozlišení displeje. `start-arcade.sh`
+  proto počká na grafické prostředí (+4 s navíc) a předá Chromiu velikost okna
+  podle skutečného rozlišení. Pokud by se to na pomalejším Pi stále stávalo,
+  zvyš ve skriptu hodnotu `sleep 4` třeba na `sleep 8`.
 - **Obraz je menší než displej:** hry se škálují podle okna — v kiosku Chromia
   to sedí samo. Pokud testuješ v okně, roztáhni ho na celou plochu.
 - **Obrazovka po chvíli zhasne:** dokonči krok A (Screen Blanking → No).

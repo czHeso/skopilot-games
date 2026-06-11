@@ -18,6 +18,25 @@ else
   exit 1
 fi
 
+# ── Počkej na grafické prostředí ────────────────────────────────────
+# Autostart se často spustí dřív, než kompozitor nastaví rozlišení displeje.
+# Chromium by pak naběhl v malém okně vlevo nahoře místo celé obrazovky.
+for _ in $(seq 1 30); do
+  if [ -n "${WAYLAND_DISPLAY:-}" ] || [ -n "${DISPLAY:-}" ]; then break; fi
+  sleep 1
+done
+sleep 4   # dej kompozitoru čas dokončit nastavení výstupu
+
+# Zjisti skutečné rozlišení displeje z DRM (funguje na X11 i Waylandu);
+# Chromium pak dostane správnou velikost okna i kdyby fullscreen selhal.
+RES="$(cat /sys/class/drm/card*-*/modes 2>/dev/null | head -n 1 || true)"
+case "$RES" in
+  *x*) : ;;
+  *)   RES="1920x1080" ;;
+esac
+SCR_W="${RES%%x*}"
+SCR_H="${RES##*x}"
+
 # Vypni šetřič / blank obrazovky (pod X11; pod Waylandem řeš v raspi-config)
 xset s off      2>/dev/null || true
 xset -dpms      2>/dev/null || true
@@ -59,6 +78,9 @@ PREF="$HOME/.config/chromium/Default/Preferences"
 exec "$BROWSER" \
   --kiosk \
   --start-fullscreen \
+  --start-maximized \
+  --window-position=0,0 \
+  --window-size="${SCR_W},${SCR_H}" \
   --noerrordialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \

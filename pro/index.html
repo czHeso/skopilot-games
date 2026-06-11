@@ -67,20 +67,26 @@ function setActions(key,val,track){
 addEventListener('keydown',e=>{
   if(KEYMAP.menu.includes(e.key)){ location.href='../index.html'; return; }
   if(state==='enter'){
-    // direct typing (keyboard): letters, digits 1-9, '-' and '/'
-    if(/^[a-zA-Z0-9\/-]$/.test(e.key)){
-      e.preventDefault();
-      const ch=e.key.toUpperCase();
-      if(NAME_CHARS.includes(ch)){ entryName[entryPos]=ch; if(entryPos<NAME_LEN-1) entryPos++; }
-      return;
-    }
-    if(e.key==='Backspace'){
-      e.preventDefault();
-      if(entryName[entryPos]===' ' && entryPos>0) entryPos--;
-      entryName[entryPos]=' ';
-      return;
+    if(entryConfirm){
+      if(e.key==='Backspace'){ e.preventDefault(); entryConfirm=false; return; }
+      /* ostatní klávesy projdou na akce (šipky = NO/YES, start = potvrdit) */
+    } else {
+      // direct typing (keyboard): letters, digits 1-9, '-' and '/'
+      if(/^[a-zA-Z0-9\/-]$/.test(e.key)){
+        e.preventDefault();
+        const ch=e.key.toUpperCase();
+        if(NAME_CHARS.includes(ch)){ entryName[entryPos]=ch; if(entryPos<NAME_LEN-1) entryPos++; }
+        return;
+      }
+      if(e.key==='Backspace'){
+        e.preventDefault();
+        if(entryName[entryPos]===' ' && entryPos>0) entryPos--;
+        entryName[entryPos]=' ';
+        return;
+      }
     }
   }
+  if(state==='title' && e.key==='Backspace'){ e.preventDefault(); openScores(); return; }
   if(state==='scores' && e.key==='Delete'){
     if(!delConfirm){ if(manage) activateManage(); else enterManage(); }
     return;
@@ -171,7 +177,7 @@ if(localStorage.getItem('sko_pro_scores')===null){ scores=[{n:'SKO',s:3000},{n:'
 /* jméno: až 5 znaků — A-Z, 1-9, '-', '/' a prázdno (mezera); koncové mezery se ořežou */
 const NAME_LEN=5;
 const NAME_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789-/ ';
-function resetEntry(){ entryName=['A',' ',' ',' ',' ']; entryPos=0; }
+function resetEntry(){ entryName=['A',' ',' ',' ',' ']; entryPos=0; entryConfirm=false; entryYes=false; }
 function cycleChar(dir){
   let i=NAME_CHARS.indexOf(entryName[entryPos]); if(i<0)i=0;
   entryName[entryPos]=NAME_CHARS[(i+dir+NAME_CHARS.length)%NAME_CHARS.length];
@@ -306,21 +312,31 @@ function gameOver(){
 
 /* ----- HIGH SCORE ENTRY ----- */
 let entryName, entryPos;
+/* potvrzení před uložením jména (ochrana proti omylem zmáčknutému B) */
+let entryConfirm=false, entryYes=false;
 function maybeEnterScore(){
   const min = scores.length<5 ? -1 : scores[scores.length-1].s;
   if(score>min){ resetEntry(); state='enter'; }
   else openScores();
 }
 function updateEnter(){
+  if(entryConfirm){
+    if(consume('left')||consume('right')) entryYes=!entryYes;
+    consume('up'); consume('down'); consume('jump');   // zahodit, ať neprosáknou do dalšího stavu
+    if(consume('shoot')||consume('start')){
+      if(entryYes){
+        scores.push({n:entryName.join('').trim()||'AAA',s:score});
+        scores.sort((a,b)=>b.s-a.s); scores=scores.slice(0,5); saveScores(scores);
+        openScores();
+      } else entryConfirm=false;
+    }
+    return;
+  }
   if(consume('up')) cycleChar(1);
   if(consume('down')) cycleChar(-1);
   if(consume('right')){ entryPos=(entryPos+1)%NAME_LEN; }
   if(consume('left')){ entryPos=(entryPos+NAME_LEN-1)%NAME_LEN; }
-  if(consume('start')){
-    scores.push({n:entryName.join('').trim()||'AAA',s:score});
-    scores.sort((a,b)=>b.s-a.s); scores=scores.slice(0,5); saveScores(scores);
-    openScores();
-  }
+  if(consume('start')){ entryConfirm=true; entryYes=false; }
 }
 
 /* ----- HALL OF FAME (MANAGE RECORDS podmenu) ----- */
@@ -553,7 +569,7 @@ function drawTitle(){
   const story=['The Mlada Boleslav cloud crashed!','SkoPilot lost his AI modules.','Grab the TOOLS, beat the BUGS,','and build an AI Agent at each exit.'];
   story.forEach((s,i)=>ctx.fillText(s, W/2, 300+i*26));
   ctx.fillStyle='#8aa'; ctx.fillText('JOY = MOVE/JUMP  ·  X = SHOOT BUG  ·  SPACE = JUMP', W/2, 410);
-  ctx.fillStyle='#3c5a52'; ctx.fillText('JOY UP = HALL OF FAME', W/2, 434);
+  ctx.fillStyle='#3c5a52'; ctx.fillText('JOY UP / BKSP = HALL OF FAME', W/2, 434);
   if(Math.floor(tick/30)%2===0) center('PUSH START', 470, '#ffff44', 18);
   // mini hi-score
   ctx.fillStyle='#3c5a52'; ctx.font='9px PixelArcade, monospace';
@@ -594,6 +610,28 @@ function drawEnter(){
   ctx.fillStyle='#8aa'; ctx.font='9px PixelArcade, monospace';
   ctx.fillText('JOY UP/DOWN = CHAR · LEFT/RIGHT = MOVE · START = OK', W/2, 424);
   ctx.fillText('OR TYPE A-Z 1-9 - / · BACKSPACE = ERASE', W/2, 448);
+  if(entryConfirm) drawSaveConfirm();
+}
+
+function drawSaveConfirm(){
+  ctx.fillStyle='rgba(2,16,11,.94)';
+  ctx.fillRect(W/2-SC.cfW/2, H/2-SC.cfH/2, SC.cfW, SC.cfH);
+  ctx.strokeStyle='#f5c518'; ctx.lineWidth=3;
+  ctx.strokeRect(W/2-SC.cfW/2, H/2-SC.cfH/2, SC.cfW, SC.cfH);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#fff'; ctx.font='12px PixelArcade, monospace';
+  ctx.fillText('SAVE "'+(entryName.join('').trim()||'AAA')+'" ?', W/2, H/2-48);
+  ctx.fillStyle='#f5c518'; ctx.font='13px PixelArcade, monospace';
+  ctx.fillText('ARE YOU SURE?', W/2, H/2-22);
+  [['NO',-85,!entryYes],['YES',85,entryYes]].forEach(([t,dx,on])=>{
+    const bx=W/2+dx, by=H/2+34;
+    ctx.fillStyle = on ? '#1f9c5e' : '#0d3a33';
+    ctx.fillRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH);
+    if(on){ ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH); }
+    ctx.fillStyle=on?'#fff':'#8aa'; ctx.font='13px PixelArcade, monospace';
+    ctx.fillText(t, bx, by);
+  });
+  ctx.textBaseline='alphabetic';
 }
 
 const SC={ rowY0:190, rowH:48, rowW:560, cfW:460, cfH:150, btnW:120, btnH:40 };

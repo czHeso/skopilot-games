@@ -157,7 +157,10 @@
     const NAME_LEN = 5;
     const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789-/ ';
     let entryName = ['A',' ',' ',' ',' '], entryPos = 0;
-    function resetEntry(){ entryName = ['A',' ',' ',' ',' ']; entryPos = 0; }
+    // confirm step before saving the name (accidental B-press protection)
+    let entryConfirm = false, entryYes = false;
+    function resetEntry(){ entryName = ['A',' ',' ',' ',' ']; entryPos = 0; entryConfirm = false; entryYes = false; }
+    function askSaveConfirm(){ entryConfirm = true; entryYes = false; }
     function cycleChar(dir){
       let i = NAME_CHARS.indexOf(entryName[entryPos]); if (i < 0) i = 0;
       entryName[entryPos] = NAME_CHARS[(i + dir + NAME_CHARS.length) % NAME_CHARS.length];
@@ -207,7 +210,10 @@
       if (state === 'idle') { state = 'playing'; ball.vy = JUMP; }
       else if (state === 'playing') { ball.vy = JUMP; }
       else if (state === 'dead') { afterDeath(); }
-      else if (state === 'enter') { confirmName(); }
+      else if (state === 'enter') {
+        if (entryConfirm) { if (entryYes) confirmName(); else entryConfirm = false; }
+        else askSaveConfirm();
+      }
       else if (state === 'scores') { init(); }
     }
     function afterDeath() {
@@ -224,6 +230,12 @@
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { location.href = '../index.html'; return; }
       if (state === 'enter') {
+        if (entryConfirm) {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); entryYes = !entryYes; }
+          else if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); if (entryYes) confirmName(); else entryConfirm = false; }
+          else if (e.key === 'Backspace') { e.preventDefault(); entryConfirm = false; }
+          return;
+        }
         // direct typing (keyboard): letters, digits 1-9, '-' and '/'
         if (/^[a-zA-Z0-9\/-]$/.test(e.key)) {
           e.preventDefault();
@@ -242,7 +254,7 @@
         else if (e.key === 'ArrowDown') { e.preventDefault(); cycleChar(-1); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); entryPos = (entryPos+1)%NAME_LEN; }
         else if (e.key === 'ArrowLeft') { e.preventDefault(); entryPos = (entryPos+NAME_LEN-1)%NAME_LEN; }
-        else if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); confirmName(); }
+        else if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); askSaveConfirm(); }
         return;
       }
       if (state === 'scores') {
@@ -272,7 +284,7 @@
         }
         return;
       }
-      if (state === 'idle' && e.key === 'ArrowUp') { e.preventDefault(); openScores(); return; }
+      if (state === 'idle' && (e.key === 'ArrowUp' || e.key === 'Backspace')) { e.preventDefault(); openScores(); return; }
       if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); primary(); }
     });
 
@@ -435,7 +447,7 @@
           ctx.fillText('CLICK / SPACE TO START', W/2, H/2 + 30);
         }
         ctx.fillStyle = '#1f9c5e'; ctx.font = '7px PixelArcade, monospace';
-        ctx.fillText('▲ UP = HALL OF FAME', W/2, H/2 + 58);
+        ctx.fillText('▲ UP / BKSP = HALL OF FAME', W/2, H/2 + 58);
       } else {
         ctx.fillStyle = '#ff5d5d'; ctx.font = '20px PixelArcade, monospace';
         ctx.fillText('GAME OVER', W/2, H/2 - 34);
@@ -476,6 +488,28 @@
       ctx.fillStyle = '#7e9a90'; ctx.font = '7px PixelArcade, monospace'; ctx.textBaseline = 'alphabetic';
       ctx.fillText('JOY: UP/DOWN CHAR · L/R MOVE · SPACE OK', W/2, 290);
       ctx.fillText('OR TYPE A-Z 1-9 - / · BACKSPACE = ERASE', W/2, 312);
+      if (entryConfirm) drawSaveConfirm();
+    }
+
+    function drawSaveConfirm(){
+      ctx.fillStyle = 'rgba(4,11,9,.92)';
+      ctx.fillRect(W/2-SC.cfW/2, H/2-SC.cfH/2, SC.cfW, SC.cfH);
+      ctx.strokeStyle = '#ffcf2e'; ctx.lineWidth = 3;
+      ctx.strokeRect(W/2-SC.cfW/2, H/2-SC.cfH/2, SC.cfW, SC.cfH);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff'; ctx.font = '10px PixelArcade, monospace';
+      ctx.fillText('SAVE "' + (entryName.join('').trim() || 'AAA') + '" ?', W/2, H/2 - 42);
+      ctx.fillStyle = '#ffcf2e';
+      ctx.fillText('ARE YOU SURE?', W/2, H/2 - 18);
+      [['NO', -75, !entryYes], ['YES', 75, entryYes]].forEach(([t, dx, on]) => {
+        const bx = W/2 + dx, by = H/2 + 28;
+        ctx.fillStyle = on ? '#1f9c5e' : '#0d3a33';
+        ctx.fillRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH);
+        if (on){ ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH); }
+        ctx.fillStyle = on ? '#fff' : '#7e9a90'; ctx.font = '11px PixelArcade, monospace';
+        ctx.fillText(t, bx, by);
+      });
+      ctx.textBaseline = 'alphabetic';
     }
 
     function actionRow(idx, label, danger){

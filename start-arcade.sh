@@ -115,6 +115,43 @@ if [ -f "$BLANK_THEME/cursors/left_ptr" ]; then
   export XCURSOR_PATH="$HOME/.icons:/usr/share/icons"
 fi
 
+# ── Hudba na pozadí ─────────────────────────────────────────────────
+# Pustí assets/Skyward_Dash.mp3 ve smyčce na maximální hlasitost.
+# Běží nezávisle na prohlížeči — po `exec` do Chromia/Firefoxu hraje dál.
+MUSIC="$APP_DIR/assets/Skyward_Dash.mp3"
+
+# Systémovou hlasitost vytoč na maximum. Názvy ovládacích prvků se mezi
+# zvukovými kartami liší, tak projedeme ty nejběžnější a chyby ignorujeme.
+if command -v amixer >/dev/null 2>&1; then
+  for CTL in Master PCM Headphone Speaker Digital Lineout; do
+    amixer -q sset "$CTL" 100% unmute 2>/dev/null || true
+  done
+  log "hlasitost nastavena na maximum (amixer)"
+fi
+
+if [ -f "$MUSIC" ]; then
+  # Vyber dostupný přehrávač a pusť ho v nekonečné smyčce.
+  play_music(){
+    if command -v mpg123 >/dev/null 2>&1; then
+      mpg123 --quiet --loop -1 "$MUSIC"
+    elif command -v ffplay >/dev/null 2>&1; then
+      ffplay -nodisp -autoexit -loop 0 -loglevel quiet "$MUSIC"
+    elif command -v mpv >/dev/null 2>&1; then
+      mpv --no-video --really-quiet --loop=inf --volume=100 "$MUSIC"
+    elif command -v cvlc >/dev/null 2>&1; then
+      cvlc --intf dummy --quiet --loop "$MUSIC"
+    else
+      log "žádný audio přehrávač nenalezen (nainstaluj: sudo apt install -y mpg123)"
+      return 1
+    fi
+  }
+  # Hlídač: kdyby přehrávač spadl, smyčku restartuj (return 1 = není čím hrát).
+  ( while play_music; do sleep 1; done ) >/dev/null 2>&1 &
+  log "hudba na pozadí spuštěna: $MUSIC (pid=$!)"
+else
+  log "hudba nenalezena: $MUSIC"
+fi
+
 # ── Firefox kiosk (alternativa, když Chromium zlobí) ────────────────
 case "$BROWSER" in
   *firefox*)

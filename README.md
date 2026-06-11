@@ -98,10 +98,11 @@ Technické detaily:
   necháš prázdné.
 - **Vstup do síně slávy:** na úvodní obrazovce každé hry zatlač **joystick
   nahoru (↑)**.
-- **Mazání rekordů:** v síni slávy vyber záznam šipkami ↑/↓ a stiskni **X**
-  (nebo Delete), potvrdíš volbou **YES/NO**. Stejně funguje i **myš** — najetím
-  záznam označíš, kliknutím smažeš. Úplně dole je položka **DELETE ALL
-  RECORDS**, která smaže celou tabulku včetně uloženého BEST skóre.
+- **Mazání rekordů:** dole v síni slávy je položka **MANAGE RECORDS** —
+  otevřeš ji tlačítkem **X** (nebo kliknutím myší). Uvnitř vybereš šipkami
+  ↑/↓ (nebo najetím myší) **jednotlivý záznam** a smažeš ho přes X/Enter/klik
+  s potvrzením **YES/NO**. K dispozici je i **DELETE ALL** (smaže celou
+  tabulku včetně uloženého BEST skóre) a **BACK** pro návrat.
 
 #### Obrázky s ovládáním (controls)
 

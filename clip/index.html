@@ -216,18 +216,25 @@
     entryName[entryPos] = NAME_CHARS[(i + dir + NAME_CHARS.length) % NAME_CHARS.length];
   }
 
-  // hall-of-fame management (select + delete records)
-  let scoreSel = -1, delConfirm = false, delYes = false;
-  function scItems(){ return scores.length ? scores.length + 1 : 0; }  // entries + DELETE ALL
-  function openScores(){ scoreSel = -1; delConfirm = false; state = 'scores'; }
+  // hall-of-fame management: MANAGE RECORDS submenu (delete one / delete all)
+  let scoreSel = -1, delConfirm = false, delYes = false, manage = false;
+  // rows: main view = records + MANAGE; manage view = records + DELETE ALL + BACK
+  function scRows(){ return manage ? scores.length + 2 : scores.length + 1; }
+  function openScores(){ scoreSel = -1; delConfirm = false; manage = false; state = 'scores'; }
+  function enterManage(){ manage = true; delConfirm = false; scoreSel = scores.length ? 0 : 1; }
+  function activateManage(){
+    if (scoreSel === scores.length + 1){ manage = false; scoreSel = -1; }   // BACK
+    else if (scoreSel >= 0){ delConfirm = true; delYes = false; }           // record / DELETE ALL
+  }
   function doDelete(){
-    if (scoreSel === scores.length){            // DELETE ALL RECORDS
+    if (scoreSel === scores.length){            // DELETE ALL
       scores = []; saveScores(scores);
       best = 0; localStorage.removeItem('sko_clip_best');
+      scoreSel = 1;                             // land on BACK
     } else if (scoreSel >= 0 && scoreSel < scores.length){
       scores.splice(scoreSel, 1); saveScores(scores);
     }
-    if (scoreSel >= scItems()) scoreSel = scItems() - 1;
+    if (scoreSel > scores.length + 1) scoreSel = scores.length + 1;
     refreshSidebar();
   }
 
@@ -525,13 +532,23 @@
         }
         return;
       }
-      const items = scItems();
-      if (items && e.key === 'ArrowDown'){ e.preventDefault(); scoreSel = (scoreSel + 1) % items; return; }
-      if (items && e.key === 'ArrowUp'){ e.preventDefault(); scoreSel = (scoreSel <= 0 ? items : scoreSel) - 1; return; }
-      if (e.key === 'x' || e.key === 'X' || e.key === 'Delete'){
-        e.preventDefault(); if (scoreSel >= 0){ delConfirm = true; delYes = false; } return;
+      if (manage){
+        const items = scores.length + 2;
+        if (e.key === 'ArrowDown'){ e.preventDefault(); scoreSel = (scoreSel + 1) % items; return; }
+        if (e.key === 'ArrowUp'){ e.preventDefault(); scoreSel = (scoreSel <= 0 ? items : scoreSel) - 1; return; }
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'x' || e.key === 'X' || e.key === 'Delete'){
+          e.preventDefault(); activateManage();
+        }
+        return;
       }
-      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); primary(); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+        e.preventDefault(); scoreSel = scoreSel === scores.length ? -1 : scores.length; return;
+      }
+      if (e.key === 'x' || e.key === 'X' || e.key === 'Delete'){ e.preventDefault(); enterManage(); return; }
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        if (scoreSel === scores.length) enterManage(); else primary();
+      }
       return;
     }
 
@@ -548,9 +565,12 @@
   }
   function scoresRowAt(x, y){
     if (x < 14 || x > board.width - 14) return -1;
-    for (let i = 0; i < scItems(); i++){
+    for (let i = 0; i < scRows(); i++){
       const cy = SC.rowY0 + i*SC.rowH;
-      if (y > cy - SC.rowH/2 && y < cy + SC.rowH/2) return i;
+      if (y > cy - SC.rowH/2 && y < cy + SC.rowH/2){
+        if (!manage && i !== scores.length) return -1;   // main view: only MANAGE row is clickable
+        return i;
+      }
     }
     return -1;
   }
@@ -564,7 +584,9 @@
   board.addEventListener('mousemove', e => {
     if (state !== 'scores' || delConfirm) return;
     const p = canvasPos(e);
-    scoreSel = scoresRowAt(p.x, p.y);
+    const row = scoresRowAt(p.x, p.y);
+    if (manage){ if (row >= 0) scoreSel = row; }
+    else scoreSel = row;
   });
   board.addEventListener('click', e => {
     if (state === 'playing' || state === 'enter') return;
@@ -576,8 +598,12 @@
       return;
     }
     const row = scoresRowAt(p.x, p.y);
-    if (row >= 0){ scoreSel = row; delConfirm = true; delYes = false; }
-    else primary();
+    if (!manage){
+      if (row === scores.length) enterManage();
+      else primary();
+      return;
+    }
+    if (row >= 0){ scoreSel = row; activateManage(); }
   });
 
   // ====== rendering ======
@@ -754,15 +780,26 @@
     ctx.fillText('OR TYPE A-Z 1-9 · BKSP = ERASE', board.width/2, 304);
   }
 
+  function actionRow(idx, label, danger){
+    const cy = SC.rowY0 + idx*SC.rowH, sel = idx === scoreSel;
+    if (sel){
+      ctx.fillStyle = danger ? '#3a0f12' : '#0d3a33';
+      ctx.fillRect(14, cy-SC.rowH/2+3, board.width-28, SC.rowH-6);
+    }
+    ctx.fillStyle = sel ? (danger ? '#ff5d5d' : '#39ff8c') : (danger ? '#7e4a4a' : '#7e9a90');
+    ctx.font = '8px PixelArcade, monospace';
+    ctx.fillText(label, board.width/2, cy);
+  }
+
   function drawScores(){
     panel(0.93);
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#ffcf2e'; ctx.font = '14px PixelArcade, monospace';
-    ctx.fillText('FASTEST TIMES', board.width/2, 64);
+    ctx.fillStyle = '#ffcf2e'; ctx.font = manage ? '12px PixelArcade, monospace' : '14px PixelArcade, monospace';
+    ctx.fillText(manage ? 'MANAGE RECORDS' : 'FASTEST TIMES', board.width/2, 64);
     ctx.textBaseline = 'middle';
     scores.forEach((e, i) => {
       const cy = SC.rowY0 + i*SC.rowH;
-      if (i === scoreSel){
+      if (manage && i === scoreSel){
         ctx.fillStyle = '#0d3a33'; ctx.fillRect(14, cy-SC.rowH/2+3, board.width-28, SC.rowH-6);
         ctx.fillStyle = '#ff5d5d'; ctx.font = '9px PixelArcade, monospace';
         ctx.textAlign = 'right'; ctx.fillText('✖', board.width - 20, cy);
@@ -770,27 +807,30 @@
       ctx.font = '9px PixelArcade, monospace';
       ctx.fillStyle = (i === 0) ? '#ffcf2e' : '#cdeede';
       ctx.textAlign = 'left';  ctx.fillText((i+1) + '. ' + e.n, 30, cy);
-      ctx.textAlign = 'right'; ctx.fillText(fmt(e.t), board.width - (i === scoreSel ? 44 : 36), cy);
+      ctx.textAlign = 'right'; ctx.fillText(fmt(e.t), board.width - (manage && i === scoreSel ? 44 : 36), cy);
     });
     ctx.textAlign = 'center';
+    if (manage){
+      actionRow(scores.length, 'DELETE ALL', true);
+      actionRow(scores.length + 1, 'BACK', false);
+    } else {
+      actionRow(scores.length, 'MANAGE RECORDS', false);
+    }
     if (!scores.length){
       ctx.fillStyle = '#3c5a52'; ctx.font = '8px PixelArcade, monospace';
-      ctx.fillText('NO RECORDS', board.width/2, SC.rowY0 + SC.rowH);
-    } else {
-      const cy = SC.rowY0 + scores.length*SC.rowH;
-      if (scoreSel === scores.length){
-        ctx.fillStyle = '#3a0f12'; ctx.fillRect(14, cy-SC.rowH/2+3, board.width-28, SC.rowH-6);
-      }
-      ctx.fillStyle = scoreSel === scores.length ? '#ff5d5d' : '#7e4a4a';
-      ctx.font = '8px PixelArcade, monospace';
-      ctx.fillText('DELETE ALL RECORDS', board.width/2, cy);
+      ctx.fillText('NO RECORDS', board.width/2, SC.rowY0 + (manage ? 3 : 2)*SC.rowH);
     }
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#3c5a52'; ctx.font = '6px PixelArcade, monospace';
-    ctx.fillText('↑↓ / MOUSE = SELECT · X / DEL = DELETE', board.width/2, board.height - 52);
-    if (Math.floor(tick/20)%2 === 0){
-      ctx.fillStyle = '#39ff8c'; ctx.font = '8px PixelArcade, monospace';
-      ctx.fillText('SPACE = PLAY AGAIN', board.width/2, board.height - 26);
+    if (manage){
+      ctx.fillStyle = '#3c5a52'; ctx.font = '6px PixelArcade, monospace';
+      ctx.fillText('↑↓ / MOUSE = SELECT · X / ENTER = OK', board.width/2, board.height - 26);
+    } else {
+      ctx.fillStyle = '#3c5a52'; ctx.font = '6px PixelArcade, monospace';
+      ctx.fillText('X / CLICK = MANAGE RECORDS', board.width/2, board.height - 52);
+      if (Math.floor(tick/20)%2 === 0){
+        ctx.fillStyle = '#39ff8c'; ctx.font = '8px PixelArcade, monospace';
+        ctx.fillText('SPACE = PLAY AGAIN', board.width/2, board.height - 26);
+      }
     }
     if (delConfirm) drawDelConfirm();
   }

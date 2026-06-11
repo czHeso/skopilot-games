@@ -253,6 +253,11 @@ s tímto výchozím rozložením:
 
 - **Černá obrazovka / menu nenaskočí:** zkontroluj cestu v `Exec=` v souboru
   `~/.config/autostart/skopilot.desktop` (musí sedět tvoje uživatelské jméno).
+- **Hra po startu naběhne v malém okně vlevo nahoře:** autostart spustil
+  Chromium dřív, než kompozitor nastavil rozlišení displeje. `start-arcade.sh`
+  proto počká na grafické prostředí (+4 s navíc) a předá Chromiu velikost okna
+  podle skutečného rozlišení. Pokud by se to na pomalejším Pi stále stávalo,
+  zvyš ve skriptu hodnotu `sleep 4` třeba na `sleep 8`.
 - **Obraz je menší než displej:** hry se škálují podle okna — v kiosku Chromia
   to sedí samo. Pokud testuješ v okně, roztáhni ho na celou plochu.
 - **Obrazovka po chvíli zhasne:** dokonči krok A (Screen Blanking → No).

@@ -210,7 +210,10 @@
   const NAME_LEN = 5;
   const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789-/ ';
   let entryName = ['A',' ',' ',' ',' '], entryPos = 0;
-  function resetEntry(){ entryName = ['A',' ',' ',' ',' ']; entryPos = 0; }
+  // confirm step before saving the name (accidental B-press protection)
+  let entryConfirm = false, entryYes = false;
+  function resetEntry(){ entryName = ['A',' ',' ',' ',' ']; entryPos = 0; entryConfirm = false; entryYes = false; }
+  function askSaveConfirm(){ entryConfirm = true; entryYes = false; }
   function cycleChar(dir){
     let i = NAME_CHARS.indexOf(entryName[entryPos]); if (i < 0) i = 0;
     entryName[entryPos] = NAME_CHARS[(i + dir + NAME_CHARS.length) % NAME_CHARS.length];
@@ -482,7 +485,10 @@
     if (state === 'idle')   { startGame(); }
     else if (state === 'dead')   { resetBoard(); state = 'idle'; }
     else if (state === 'scores') { resetBoard(); state = 'idle'; }
-    else if (state === 'enter')  { confirmName(); }
+    else if (state === 'enter')  {
+      if (entryConfirm){ if (entryYes) confirmName(); else entryConfirm = false; }
+      else askSaveConfirm();
+    }
   }
 
   // ====== controls ======
@@ -501,6 +507,12 @@
     }
 
     if (state === 'enter'){
+      if (entryConfirm){
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'){ e.preventDefault(); entryYes = !entryYes; }
+        else if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); if (entryYes) confirmName(); else entryConfirm = false; }
+        else if (e.key === 'Backspace'){ e.preventDefault(); entryConfirm = false; }
+        return;
+      }
       // direct typing (keyboard): letters, digits 1-9, '-' and '/'
       if (/^[a-zA-Z0-9\/-]$/.test(e.key)){
         e.preventDefault();
@@ -519,7 +531,7 @@
         case 'ArrowDown': e.preventDefault(); cycleChar(-1); break;
         case 'ArrowRight': e.preventDefault(); entryPos = (entryPos+1)%NAME_LEN; break;
         case 'ArrowLeft': e.preventDefault(); entryPos = (entryPos+NAME_LEN-1)%NAME_LEN; break;
-        case 'Enter': case ' ': e.preventDefault(); confirmName(); break;
+        case 'Enter': case ' ': e.preventDefault(); askSaveConfirm(); break;
       }
       return;
     }
@@ -552,7 +564,7 @@
       return;
     }
 
-    if (state === 'idle' && e.key === 'ArrowUp'){ e.preventDefault(); openScores(); return; }
+    if (state === 'idle' && (e.key === 'ArrowUp' || e.key === 'Backspace')){ e.preventDefault(); openScores(); return; }
     if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); primary(); }
   });
 
@@ -735,7 +747,7 @@
       ctx.fillText('ENTER / SPACE = START', board.width/2, 320);
     }
     ctx.fillStyle = '#1f9c5e'; ctx.font = '7px PixelArcade, monospace';
-    ctx.fillText('▲ UP = HALL OF FAME', board.width/2, 352);
+    ctx.fillText('▲ UP / BKSP = HALL OF FAME', board.width/2, 352);
   }
 
   function drawGameOver(){
@@ -778,6 +790,29 @@
     ctx.fillStyle = '#8aa6a0'; ctx.font = '6px PixelArcade, monospace'; ctx.textBaseline = 'alphabetic';
     ctx.fillText('UP/DOWN CHAR · L/R MOVE · SPACE OK', board.width/2, 286);
     ctx.fillText('OR TYPE A-Z 1-9 - / · BKSP = ERASE', board.width/2, 304);
+    if (entryConfirm) drawSaveConfirm();
+  }
+
+  function drawSaveConfirm(){
+    const cx = board.width/2, cy = board.height/2;
+    ctx.fillStyle = 'rgba(4,11,9,.92)';
+    ctx.fillRect(cx-SC.cfW/2, cy-SC.cfH/2, SC.cfW, SC.cfH);
+    ctx.strokeStyle = '#ffcf2e'; ctx.lineWidth = 3;
+    ctx.strokeRect(cx-SC.cfW/2, cy-SC.cfH/2, SC.cfW, SC.cfH);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff'; ctx.font = '8px PixelArcade, monospace';
+    ctx.fillText('SAVE "' + (entryName.join('').trim() || 'AAA') + '" ?', cx, cy - 40);
+    ctx.fillStyle = '#ffcf2e';
+    ctx.fillText('ARE YOU SURE?', cx, cy - 20);
+    [['NO', -58, !entryYes], ['YES', 58, entryYes]].forEach(([t, dx, on]) => {
+      const bx = cx + dx, by = cy + 26;
+      ctx.fillStyle = on ? '#1f9c5e' : '#0d3a33';
+      ctx.fillRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH);
+      if (on){ ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH); }
+      ctx.fillStyle = on ? '#fff' : '#8aa6a0'; ctx.font = '9px PixelArcade, monospace';
+      ctx.fillText(t, bx, by);
+    });
+    ctx.textBaseline = 'alphabetic';
   }
 
   function actionRow(idx, label, danger){

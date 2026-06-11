@@ -253,11 +253,23 @@ s tímto výchozím rozložením:
 
 - **Černá obrazovka / menu nenaskočí:** zkontroluj cestu v `Exec=` v souboru
   `~/.config/autostart/skopilot.desktop` (musí sedět tvoje uživatelské jméno).
-- **Hra po startu naběhne v malém okně vlevo nahoře:** autostart spustil
-  Chromium dřív, než kompozitor nastavil rozlišení displeje. `start-arcade.sh`
-  proto počká na grafické prostředí (+4 s navíc) a předá Chromiu velikost okna
-  podle skutečného rozlišení. Pokud by se to na pomalejším Pi stále stávalo,
-  zvyš ve skriptu hodnotu `sleep 4` třeba na `sleep 8`.
+- **Hra po startu naběhne v malém okně / pruhu místo celé obrazovky:**
+  autostart spustil Chromium dřív, než kompozitor nastavil rozlišení displeje,
+  nebo velikost okna neodpovídala logickému rozlišení (typicky u otočené
+  obrazovky). `start-arcade.sh` proto počká na grafické prostředí (+4 s navíc)
+  a zjistí **logické** rozlišení přes `xrandr`/`wlr-randr` (s fallbackem na
+  DRM). Jak to debugnout:
+  1. Po startu se podívej do logu: `tail ~/skopilot-arcade.log` — je tam typ
+     session (X11/Wayland), jak dlouho skript čekal a jaké rozlišení zjistil.
+  2. Porovnej s realitou: `DISPLAY=:0 xrandr --current | grep current`
+     (přes SSH). Když nesedí, je obrazovka otočená/škálovaná v
+     **Screen Configuration** — zjištěné rozlišení musí odpovídat tomu
+     logickému.
+  3. Spusť skript ručně z plochy (`~/skopilot-games/start-arcade.sh`) — když
+     ručně funguje a po bootu ne, je to časování: zvyš ve skriptu `sleep 4`
+     na `sleep 8`.
+  4. Když je okno malé, zmáčkni `F11` — pokud se tím roztáhne, jde o geometrii
+     okna (pošli obsah logu), pokud ne, problém je v kompozitoru.
 - **Obraz je menší než displej:** hry se škálují podle okna — v kiosku Chromia
   to sedí samo. Pokud testuješ v okně, roztáhni ho na celou plochu.
 - **Obrazovka po chvíli zhasne:** dokonči krok A (Screen Blanking → No).

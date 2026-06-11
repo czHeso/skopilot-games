@@ -270,6 +270,16 @@ s tímto výchozím rozložením:
      na `sleep 8`.
   4. Když je okno malé, zmáčkni `F11` — pokud se tím roztáhne, jde o geometrii
      okna (pošli obsah logu), pokud ne, problém je v kompozitoru.
+- **V logu je každý řádek dvakrát / objeví se druhé malé okno:** skript se
+  spouští **dvakrát** — bývá v autostartu na více místech najednou. Druhé
+  Chromium se připojí k běžící instanci a otevře malé okno bez kiosku.
+  Skript má od teď pojistku (`flock`), která druhý start zablokuje (v logu
+  uvidíš „druhý start zablokován"). Duplicitní záznam najdeš a smažeš takto:
+  ```bash
+  grep -Rl skopilot ~/.config/autostart ~/.config/lxsession \
+       ~/.config/labwc ~/.config/wayfire.ini 2>/dev/null
+  ```
+  Nech jen jeden (doporučeně `~/.config/autostart/skopilot.desktop`).
 - **Obraz je menší než displej:** hry se škálují podle okna — v kiosku Chromia
   to sedí samo. Pokud testuješ v okně, roztáhni ho na celou plochu.
 - **Obrazovka po chvíli zhasne:** dokonči krok A (Screen Blanking → No).

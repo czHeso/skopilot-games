@@ -129,17 +129,26 @@ if command -v amixer >/dev/null 2>&1; then
   log "hlasitost nastavena na maximum (amixer)"
 fi
 
+# Softwarový boost nad 100 % systémové hlasitosti. 2.0 = 2× (+6 dB).
+# Hardware je na maximu, tak se signál zesílí už v přehrávači. Při vyšších
+# hodnotách může zvuk „řezat" (clipping) — pak hodnotu sniž, např.:
+#   SKOPILOT_MUSIC_BOOST=1.5 ~/skopilot-games/start-arcade.sh
+BOOST="${SKOPILOT_MUSIC_BOOST:-2.0}"
+
 if [ -f "$MUSIC" ]; then
   # Vyber dostupný přehrávač a pusť ho v nekonečné smyčce.
   play_music(){
     if command -v mpg123 >/dev/null 2>&1; then
-      mpg123 --quiet --loop -1 "$MUSIC"
+      # --scale: výchozí 32768 = 1×; vynásobíme boostem
+      SCALE="$(awk -v b="$BOOST" 'BEGIN{printf "%d", 32768*b}')"
+      mpg123 --quiet --loop -1 --scale "$SCALE" "$MUSIC"
     elif command -v ffplay >/dev/null 2>&1; then
-      ffplay -nodisp -autoexit -loop 0 -loglevel quiet "$MUSIC"
+      ffplay -nodisp -autoexit -loop 0 -loglevel quiet -af "volume=$BOOST" "$MUSIC"
     elif command -v mpv >/dev/null 2>&1; then
-      mpv --no-video --really-quiet --loop=inf --volume=100 "$MUSIC"
+      VOL="$(awk -v b="$BOOST" 'BEGIN{printf "%d", 100*b}')"
+      mpv --no-video --really-quiet --loop=inf --volume-max="$VOL" --volume="$VOL" "$MUSIC"
     elif command -v cvlc >/dev/null 2>&1; then
-      cvlc --intf dummy --quiet --loop "$MUSIC"
+      cvlc --intf dummy --quiet --loop --gain "$BOOST" "$MUSIC"
     else
       log "žádný audio přehrávač nenalezen (nainstaluj: sudo apt install -y mpg123)"
       return 1
@@ -147,7 +156,7 @@ if [ -f "$MUSIC" ]; then
   }
   # Hlídač: kdyby přehrávač spadl, smyčku restartuj (return 1 = není čím hrát).
   ( while play_music; do sleep 1; done ) >/dev/null 2>&1 &
-  log "hudba na pozadí spuštěna: $MUSIC (pid=$!)"
+  log "hudba na pozadí spuštěna: $MUSIC (boost=${BOOST}x, pid=$!)"
 else
   log "hudba nenalezena: $MUSIC"
 fi

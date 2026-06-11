@@ -71,7 +71,7 @@ Herní mechaniky:
 - **Časový limit** — Server Timeout odpočítává, spěchej!
 - **Bugy** — nepřátelé, kterým se musíš vyhnout nebo je zničit výstřelem
 - **Power‑upy** — ☕ zrychlení pohybu, 🛡 firewall (dočasná nezranitelnost)
-- **Síň slávy** — arkádové zadávání 3 písmen jména (klasika!)
+- **Síň slávy** — arkádové zadávání jména (až 5 znaků, A–Z + 1–9)
 
 Technické detaily:
 - Rozlišení **4:3 (800×600)**, automaticky škáluje na celou obrazovku
@@ -89,6 +89,32 @@ Technické detaily:
 - **ESC** kdykoliv vrátí do menu, vlevo nahoře je i tlačítko **◀ MENU**
 - Ukládají nejlepší skóre do prohlížeče (`localStorage`)
 - Fungují v **Chromiu bez internetu** — vhodné pro kiosky a výstavní stánky
+
+#### Síň slávy (Hall of Fame)
+
+- **Zadání jména:** až **5 znaků** (A–Z + číslice 1–9). Funguje arkádově
+  joystickem (↑/↓ mění znak, ←/→ posouvá pozici, Start/Enter potvrdí) **i psaním
+  na klávesnici** (Backspace maže). Kratší jméno necháš tak, že zbylé pozice
+  necháš prázdné.
+- **Vstup do síně slávy:** na úvodní obrazovce každé hry zatlač **joystick
+  nahoru (↑)**.
+- **Mazání rekordů:** v síni slávy vyber záznam šipkami ↑/↓ a stiskni **X**
+  (nebo Delete), potvrdíš volbou **YES/NO**. Stejně funguje i **myš** — najetím
+  záznam označíš, kliknutím smažeš. Úplně dole je položka **DELETE ALL
+  RECORDS**, která smaže celou tabulku včetně uloženého BEST skóre.
+
+#### Obrázky s ovládáním (controls)
+
+Každá hra si na úvodní obrazovce zobrazuje vlastní nápovědu ovládání:
+
+| Hra | Soubor |
+|-----|--------|
+| Flappy ŠkoPilot | `assets/controls-1.png` |
+| ŠkoPilot Clip | `assets/controls-2.png` |
+| ŠkoPilot Pro | `assets/controls-3.png` |
+
+Když soubor pro danou hru chybí, použije se společný `assets/controls.png`;
+když chybí i ten, nápověda se prostě nezobrazí (nic nespadne).
 
 ---
 
@@ -232,6 +258,13 @@ s tímto výchozím rozložením:
 - **Aktualizace her:** `cd ~/skopilot-games && git pull`, pak restart.
 - **Hra sekne nebo padá:** zkus `chromium-browser --disable-gpu index.html` —
   na některých Pi 4 se GPU acceleration chová nestabilně pod Waylandem.
+- **Kurzor myši je pořád vidět:** `unclutter` funguje jen pod X11 — na novějším
+  Raspberry Pi OS (Bookworm, Wayland/labwc) kurzor neskryje. `start-arcade.sh`
+  to řeší sám: vygeneruje průhledný kurzorový motiv `~/.icons/blank` a nastaví
+  ho Chromiu (`XCURSOR_THEME=blank`), takže kurzor v kiosku není vidět vůbec.
+  Pokud by i přesto byl vidět (např. kurzor kompozitoru ještě před startem
+  Chromia), přidej řádek `XCURSOR_THEME=blank` do `~/.config/labwc/environment`
+  a restartuj.
 
 ---
 

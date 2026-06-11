@@ -14,6 +14,8 @@
     }
     *{ margin:0; padding:0; box-sizing:border-box; }
     *{cursor:none !important;}   /* kiosk: hide mouse cursor (Wayland-safe) */
+    /* hall of fame: allow the mouse so records can be deleted by clicking */
+    body.allow-cursor, body.allow-cursor *{cursor:auto !important;}
     html,body{ height:100%; }
     body{
       background:var(--bg); color:var(--white);
@@ -79,7 +81,8 @@
 <body>
   <div id="bg"></div>
   <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
-  <img id="controlsHelp" src="../assets/controls.png" alt="ovládání" onerror="this.style.display='none'; this.dataset.missing='1'">
+  <img id="controlsHelp" src="../assets/controls-2.png" alt="ovládání"
+       onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='../assets/controls.png';}else{this.style.display='none';this.dataset.missing='1';}">
   <div id="stage">
     <div id="well">
       <canvas id="board" width="330" height="440"></canvas>
@@ -197,12 +200,36 @@
   const SEED_VERSION = '2';
   const DEFAULT_SCORES = [{n:'SKO',t:12000},{n:'PIL',t:16000},{n:'OT0',t:20000},{n:'AAA',t:24000},{n:'BUG',t:30000}];
   let scores = loadScores();
-  if (scores.length === 0 || localStorage.getItem('sko_clip_ver') !== SEED_VERSION){
+  // seed defaults only on first run / seed upgrade — an emptied (deleted) table stays empty
+  if (localStorage.getItem('sko_clip_scores') === null || localStorage.getItem('sko_clip_ver') !== SEED_VERSION){
     scores = DEFAULT_SCORES.map(e => ({...e}));
     saveScores(scores);
     localStorage.setItem('sko_clip_ver', SEED_VERSION);
   }
-  let entryName = ['A','A','A'], entryPos = 0;
+  // name entry: up to 5 chars, A-Z + 1-9, trailing blanks are trimmed
+  const NAME_LEN = 5;
+  const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789 ';
+  let entryName = ['A',' ',' ',' ',' '], entryPos = 0;
+  function resetEntry(){ entryName = ['A',' ',' ',' ',' ']; entryPos = 0; }
+  function cycleChar(dir){
+    let i = NAME_CHARS.indexOf(entryName[entryPos]); if (i < 0) i = 0;
+    entryName[entryPos] = NAME_CHARS[(i + dir + NAME_CHARS.length) % NAME_CHARS.length];
+  }
+
+  // hall-of-fame management (select + delete records)
+  let scoreSel = -1, delConfirm = false, delYes = false;
+  function scItems(){ return scores.length ? scores.length + 1 : 0; }  // entries + DELETE ALL
+  function openScores(){ scoreSel = -1; delConfirm = false; state = 'scores'; }
+  function doDelete(){
+    if (scoreSel === scores.length){            // DELETE ALL RECORDS
+      scores = []; saveScores(scores);
+      best = 0; localStorage.removeItem('sko_clip_best');
+    } else if (scoreSel >= 0 && scoreSel < scores.length){
+      scores.splice(scoreSel, 1); saveScores(scores);
+    }
+    if (scoreSel >= scItems()) scoreSel = scItems() - 1;
+    refreshSidebar();
+  }
 
   function fmt(cs){
     if (!cs && cs !== 0) return '—';
@@ -421,20 +448,20 @@
     if (!best || finalCs < best){ best = finalCs; localStorage.setItem('sko_clip_best', best); }
     const worst = scores.length < 5 ? Infinity : scores[scores.length - 1].t;
     if (finalCs < worst){
-      entryName = ['A','A','A']; entryPos = 0; state = 'enter';
+      resetEntry(); state = 'enter';
     } else {
-      state = 'scores';
+      openScores();
     }
     refreshSidebar();
   }
 
   function confirmName(){
-    scores.push({ n: entryName.join(''), t: finalCs });
+    scores.push({ n: entryName.join('').trim() || 'AAA', t: finalCs });
     scores.sort((a,b) => a.t - b.t);
     scores = scores.slice(0, 5);
     saveScores(scores);
     refreshSidebar();
-    state = 'scores';
+    openScores();
   }
 
   function startGame(){
@@ -467,21 +494,91 @@
     }
 
     if (state === 'enter'){
-      const code = entryName[entryPos].charCodeAt(0) - 65;
+      // direct typing (keyboard): letters + digits 1-9
+      if (/^[a-zA-Z0-9]$/.test(e.key)){
+        e.preventDefault();
+        const ch = e.key.toUpperCase();
+        if (NAME_CHARS.includes(ch)){ entryName[entryPos] = ch; if (entryPos < NAME_LEN-1) entryPos++; }
+        return;
+      }
+      if (e.key === 'Backspace'){
+        e.preventDefault();
+        if (entryName[entryPos] === ' ' && entryPos > 0) entryPos--;
+        entryName[entryPos] = ' ';
+        return;
+      }
       switch (e.key){
-        case 'ArrowUp': case 'w': e.preventDefault(); entryName[entryPos] = String.fromCharCode((code+1)%26+65); break;
-        case 'ArrowDown': case 's': e.preventDefault(); entryName[entryPos] = String.fromCharCode((code+25)%26+65); break;
-        case 'ArrowRight': case 'd': e.preventDefault(); entryPos = (entryPos+1)%3; break;
-        case 'ArrowLeft': case 'a': e.preventDefault(); entryPos = (entryPos+2)%3; break;
-        case 'Enter': case ' ': case 'x': case 'X': e.preventDefault(); confirmName(); break;
+        case 'ArrowUp': e.preventDefault(); cycleChar(1); break;
+        case 'ArrowDown': e.preventDefault(); cycleChar(-1); break;
+        case 'ArrowRight': e.preventDefault(); entryPos = (entryPos+1)%NAME_LEN; break;
+        case 'ArrowLeft': e.preventDefault(); entryPos = (entryPos+NAME_LEN-1)%NAME_LEN; break;
+        case 'Enter': case ' ': e.preventDefault(); confirmName(); break;
       }
       return;
     }
 
+    if (state === 'scores'){
+      if (delConfirm){
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'){ e.preventDefault(); delYes = !delYes; }
+        else if (e.key === 'Enter' || e.key === ' ' || e.key === 'x' || e.key === 'X'){
+          e.preventDefault(); if (delYes) doDelete(); delConfirm = false;
+        }
+        return;
+      }
+      const items = scItems();
+      if (items && e.key === 'ArrowDown'){ e.preventDefault(); scoreSel = (scoreSel + 1) % items; return; }
+      if (items && e.key === 'ArrowUp'){ e.preventDefault(); scoreSel = (scoreSel <= 0 ? items : scoreSel) - 1; return; }
+      if (e.key === 'x' || e.key === 'X' || e.key === 'Delete'){
+        e.preventDefault(); if (scoreSel >= 0){ delConfirm = true; delYes = false; } return;
+      }
+      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); primary(); }
+      return;
+    }
+
+    if (state === 'idle' && e.key === 'ArrowUp'){ e.preventDefault(); openScores(); return; }
     if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); primary(); }
   });
 
-  board.addEventListener('click', () => { if (state !== 'playing' && state !== 'enter') primary(); });
+  // ===== mouse on the hall of fame (hover + click to delete) =====
+  const SC = { rowY0: 104, rowH: 36, cfW: 290, cfH: 120, btnW: 90, btnH: 30 };
+  function canvasPos(e){
+    const r = board.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * board.width / r.width,
+             y: (e.clientY - r.top) * board.height / r.height };
+  }
+  function scoresRowAt(x, y){
+    if (x < 14 || x > board.width - 14) return -1;
+    for (let i = 0; i < scItems(); i++){
+      const cy = SC.rowY0 + i*SC.rowH;
+      if (y > cy - SC.rowH/2 && y < cy + SC.rowH/2) return i;
+    }
+    return -1;
+  }
+  function confirmHit(x, y){
+    const by = board.height/2 + 22;
+    if (Math.abs(y - by) > SC.btnH/2) return null;
+    if (Math.abs(x - (board.width/2 - 58)) < SC.btnW/2) return 'no';
+    if (Math.abs(x - (board.width/2 + 58)) < SC.btnW/2) return 'yes';
+    return null;
+  }
+  board.addEventListener('mousemove', e => {
+    if (state !== 'scores' || delConfirm) return;
+    const p = canvasPos(e);
+    scoreSel = scoresRowAt(p.x, p.y);
+  });
+  board.addEventListener('click', e => {
+    if (state === 'playing' || state === 'enter') return;
+    if (state !== 'scores'){ primary(); return; }
+    const p = canvasPos(e);
+    if (delConfirm){
+      const hit = confirmHit(p.x, p.y);
+      if (hit){ if (hit === 'yes') doDelete(); delConfirm = false; }
+      return;
+    }
+    const row = scoresRowAt(p.x, p.y);
+    if (row >= 0){ scoreSel = row; delConfirm = true; delYes = false; }
+    else primary();
+  });
 
   // ====== rendering ======
   function drawCell(g, px, py, sz, color){
@@ -590,6 +687,7 @@
     else if (state === 'scores') drawScores();
     const help = document.getElementById('controlsHelp');
     if (help && !help.dataset.missing) help.classList.toggle('show', state === 'idle');
+    document.body.classList.toggle('allow-cursor', state === 'scores');
   }
 
   function panel(alpha){ ctx.fillStyle = 'rgba(6,32,29,' + alpha + ')'; ctx.fillRect(0, 0, board.width, board.height); }
@@ -610,6 +708,8 @@
       ctx.fillStyle = '#39ff8c'; ctx.font = '9px PixelArcade, monospace';
       ctx.fillText('ENTER / SPACE = START', board.width/2, 320);
     }
+    ctx.fillStyle = '#1f9c5e'; ctx.font = '7px PixelArcade, monospace';
+    ctx.fillText('▲ UP = HALL OF FAME', board.width/2, 352);
   }
 
   function drawGameOver(){
@@ -634,40 +734,88 @@
     ctx.fillStyle = '#cdeede'; ctx.font = '11px PixelArcade, monospace';
     ctx.fillText('TIME ' + fmt(finalCs), board.width/2, 120);
     ctx.fillStyle = '#39ff8c'; ctx.font = '8px PixelArcade, monospace';
-    ctx.fillText('ENTER YOUR INITIALS', board.width/2, 160);
+    ctx.fillText('ENTER YOUR NAME', board.width/2, 160);
     ctx.textBaseline = 'middle';
-    for (let i = 0; i < 3; i++){
-      const x = board.width/2 - 48 + i*48;
+    for (let i = 0; i < NAME_LEN; i++){
+      const x = board.width/2 - ((NAME_LEN-1)*52)/2 + i*52;
       ctx.fillStyle = i === entryPos ? '#34625b' : '#0d3a33';
-      ctx.fillRect(x-18, 188, 36, 44);
-      ctx.fillStyle = '#fff'; ctx.font = '20px PixelArcade, monospace';
-      ctx.fillText(entryName[i], x, 212);
+      ctx.fillRect(x-19, 188, 38, 44);
+      if (entryName[i] !== ' '){
+        ctx.fillStyle = '#fff'; ctx.font = '20px PixelArcade, monospace';
+        ctx.fillText(entryName[i], x, 212);
+      }
       if (i === entryPos && Math.floor(tick/20)%2 === 0){
         ctx.fillStyle = '#ffd23b'; ctx.font = '10px PixelArcade, monospace';
         ctx.fillText('▲', x, 174); ctx.fillText('▼', x, 246);
       }
     }
     ctx.fillStyle = '#8aa6a0'; ctx.font = '6px PixelArcade, monospace'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('UP/DOWN CHANGE · L/R MOVE · SPACE OK', board.width/2, 290);
+    ctx.fillText('UP/DOWN CHAR · L/R MOVE · SPACE OK', board.width/2, 286);
+    ctx.fillText('OR TYPE A-Z 1-9 · BKSP = ERASE', board.width/2, 304);
   }
 
   function drawScores(){
     panel(0.93);
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = '#ffcf2e'; ctx.font = '14px PixelArcade, monospace';
-    ctx.fillText('FASTEST TIMES', board.width/2, 70);
-    ctx.font = '11px PixelArcade, monospace';
+    ctx.fillText('FASTEST TIMES', board.width/2, 64);
+    ctx.textBaseline = 'middle';
     scores.forEach((e, i) => {
-      const y = 120 + i*42;
+      const cy = SC.rowY0 + i*SC.rowH;
+      if (i === scoreSel){
+        ctx.fillStyle = '#0d3a33'; ctx.fillRect(14, cy-SC.rowH/2+3, board.width-28, SC.rowH-6);
+        ctx.fillStyle = '#ff5d5d'; ctx.font = '9px PixelArcade, monospace';
+        ctx.textAlign = 'right'; ctx.fillText('✖', board.width - 20, cy);
+      }
+      ctx.font = '9px PixelArcade, monospace';
       ctx.fillStyle = (i === 0) ? '#ffcf2e' : '#cdeede';
-      ctx.textAlign = 'left';  ctx.fillText((i+1) + '. ' + e.n, 60, y);
-      ctx.textAlign = 'right'; ctx.fillText(fmt(e.t), board.width - 50, y);
+      ctx.textAlign = 'left';  ctx.fillText((i+1) + '. ' + e.n, 30, cy);
+      ctx.textAlign = 'right'; ctx.fillText(fmt(e.t), board.width - (i === scoreSel ? 44 : 36), cy);
     });
     ctx.textAlign = 'center';
+    if (!scores.length){
+      ctx.fillStyle = '#3c5a52'; ctx.font = '8px PixelArcade, monospace';
+      ctx.fillText('NO RECORDS', board.width/2, SC.rowY0 + SC.rowH);
+    } else {
+      const cy = SC.rowY0 + scores.length*SC.rowH;
+      if (scoreSel === scores.length){
+        ctx.fillStyle = '#3a0f12'; ctx.fillRect(14, cy-SC.rowH/2+3, board.width-28, SC.rowH-6);
+      }
+      ctx.fillStyle = scoreSel === scores.length ? '#ff5d5d' : '#7e4a4a';
+      ctx.font = '8px PixelArcade, monospace';
+      ctx.fillText('DELETE ALL RECORDS', board.width/2, cy);
+    }
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#3c5a52'; ctx.font = '6px PixelArcade, monospace';
+    ctx.fillText('↑↓ / MOUSE = SELECT · X / DEL = DELETE', board.width/2, board.height - 52);
     if (Math.floor(tick/20)%2 === 0){
       ctx.fillStyle = '#39ff8c'; ctx.font = '8px PixelArcade, monospace';
-      ctx.fillText('SPACE / CLICK = PLAY AGAIN', board.width/2, board.height - 26);
+      ctx.fillText('SPACE = PLAY AGAIN', board.width/2, board.height - 26);
     }
+    if (delConfirm) drawDelConfirm();
+  }
+
+  function drawDelConfirm(){
+    const cx = board.width/2, cy = board.height/2;
+    ctx.fillStyle = 'rgba(4,11,9,.9)';
+    ctx.fillRect(cx-SC.cfW/2, cy-SC.cfH/2, SC.cfW, SC.cfH);
+    ctx.strokeStyle = '#ff5d5d'; ctx.lineWidth = 3;
+    ctx.strokeRect(cx-SC.cfW/2, cy-SC.cfH/2, SC.cfW, SC.cfH);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff'; ctx.font = '8px PixelArcade, monospace';
+    const label = scoreSel === scores.length
+      ? 'DELETE ALL RECORDS?'
+      : 'DELETE ' + (scores[scoreSel] ? scores[scoreSel].n.trim() : '') + ' ?';
+    ctx.fillText(label, cx, cy - 28);
+    [['NO', -58, !delYes], ['YES', 58, delYes]].forEach(([t, dx, on]) => {
+      const bx = cx + dx, by = cy + 22;
+      ctx.fillStyle = on ? (t === 'YES' ? '#7a1f1f' : '#1f9c5e') : '#0d3a33';
+      ctx.fillRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH);
+      if (on){ ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH); }
+      ctx.fillStyle = on ? '#fff' : '#8aa6a0'; ctx.font = '9px PixelArcade, monospace';
+      ctx.fillText(t, bx, by);
+    });
+    ctx.textBaseline = 'alphabetic';
   }
 
   // ====== next piece preview ======

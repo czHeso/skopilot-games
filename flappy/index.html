@@ -8,6 +8,8 @@
     @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     *{cursor:none !important;}   /* kiosk: hide mouse cursor (Wayland-safe) */
+    /* hall of fame: allow the mouse so records can be deleted by clicking */
+    body.allow-cursor, body.allow-cursor *{cursor:auto !important;}
     html,body{height:100%;}
     body {
       background:#040b09;
@@ -57,7 +59,8 @@
 <body>
   <div id="bg"></div>
   <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
-  <img id="controlsHelp" src="../assets/controls.png" alt="ovládání" onerror="this.style.display='none'; this.dataset.missing='1'">
+  <img id="controlsHelp" src="../assets/controls-1.png" alt="ovládání"
+       onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='../assets/controls.png';}else{this.style.display='none';this.dataset.missing='1';}">
   <div id="stage">
     <div id="hud">SCORE <span id="score">0</span> &nbsp; BEST <span id="best">0</span> &nbsp; <span style="color:#ffcf2e">$</span> <span id="coins">0</span></div>
     <canvas id="canvas" width="580" height="380"></canvas>
@@ -147,8 +150,32 @@
     function loadScores(){ try { return JSON.parse(localStorage.getItem('sko_flappy_scores')) || []; } catch(e){ return []; } }
     function saveScores(s){ localStorage.setItem('sko_flappy_scores', JSON.stringify(s)); }
     let scores = loadScores();
-    if (scores.length === 0){ scores = [{n:'SKO',s:25},{n:'PIL',s:18},{n:'OT0',s:12},{n:'AAA',s:6},{n:'BUG',s:2}]; saveScores(scores); }
-    let entryName = ['A','A','A'], entryPos = 0;
+    // seed defaults only on the very first run — an emptied (deleted) table stays empty
+    if (localStorage.getItem('sko_flappy_scores') === null){ scores = [{n:'SKO',s:25},{n:'PIL',s:18},{n:'OT0',s:12},{n:'AAA',s:6},{n:'BUG',s:2}]; saveScores(scores); }
+
+    // name entry: up to 5 chars, A-Z + 1-9, trailing blanks are trimmed
+    const NAME_LEN = 5;
+    const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789 ';
+    let entryName = ['A',' ',' ',' ',' '], entryPos = 0;
+    function resetEntry(){ entryName = ['A',' ',' ',' ',' ']; entryPos = 0; }
+    function cycleChar(dir){
+      let i = NAME_CHARS.indexOf(entryName[entryPos]); if (i < 0) i = 0;
+      entryName[entryPos] = NAME_CHARS[(i + dir + NAME_CHARS.length) % NAME_CHARS.length];
+    }
+
+    // hall-of-fame management (select + delete records)
+    let scoreSel = -1, delConfirm = false, delYes = false;
+    function scItems(){ return scores.length ? scores.length + 1 : 0; }  // entries + DELETE ALL
+    function openScores(){ scoreSel = -1; delConfirm = false; state = 'scores'; }
+    function doDelete(){
+      if (scoreSel === scores.length){            // DELETE ALL RECORDS
+        scores = []; saveScores(scores);
+        best = 0; bestEl.textContent = 0; localStorage.removeItem('sko_flappy_best');
+      } else if (scoreSel >= 0 && scoreSel < scores.length){
+        scores.splice(scoreSel, 1); saveScores(scores);
+      }
+      if (scoreSel >= scItems()) scoreSel = scItems() - 1;
+    }
 
     function init() {
       ball = { y: H / 2, vy: 0 };
@@ -178,28 +205,97 @@
     }
     function afterDeath() {
       const min = scores.length < 5 ? -1 : scores[scores.length - 1].s;
-      if (score > min) { entryName = ['A','A','A']; entryPos = 0; state = 'enter'; }
+      if (score > min) { resetEntry(); state = 'enter'; }
       else init();
     }
     function confirmName() {
-      scores.push({ n: entryName.join(''), s: score });
+      scores.push({ n: entryName.join('').trim() || 'AAA', s: score });
       scores.sort((a,b)=>b.s-a.s); scores = scores.slice(0,5); saveScores(scores);
-      state = 'scores';
+      openScores();
     }
 
-    canvas.addEventListener('click', primary);
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { location.href = '../index.html'; return; }
       if (state === 'enter') {
-        const c = entryName[entryPos].charCodeAt(0) - 65;
-        if (e.key === 'ArrowUp' || e.key === 'w') { e.preventDefault(); entryName[entryPos] = String.fromCharCode((c+1)%26+65); }
-        else if (e.key === 'ArrowDown' || e.key === 's') { e.preventDefault(); entryName[entryPos] = String.fromCharCode((c+25)%26+65); }
-        else if (e.key === 'ArrowRight' || e.key === 'd') { e.preventDefault(); entryPos = (entryPos+1)%3; }
-        else if (e.key === 'ArrowLeft' || e.key === 'a') { e.preventDefault(); entryPos = (entryPos+2)%3; }
-        else if (e.code === 'Space' || e.key === 'Enter' || e.key === 'x' || e.key === 'X') { e.preventDefault(); confirmName(); }
+        // direct typing (keyboard): letters + digits 1-9
+        if (/^[a-zA-Z0-9]$/.test(e.key)) {
+          e.preventDefault();
+          const ch = e.key.toUpperCase();
+          if (NAME_CHARS.includes(ch)) { entryName[entryPos] = ch; if (entryPos < NAME_LEN-1) entryPos++; }
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          if (entryName[entryPos] === ' ' && entryPos > 0) entryPos--;
+          entryName[entryPos] = ' ';
+          return;
+        }
+        // arcade-style joystick entry
+        if (e.key === 'ArrowUp') { e.preventDefault(); cycleChar(1); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); cycleChar(-1); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); entryPos = (entryPos+1)%NAME_LEN; }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); entryPos = (entryPos+NAME_LEN-1)%NAME_LEN; }
+        else if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); confirmName(); }
         return;
       }
+      if (state === 'scores') {
+        if (delConfirm) {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); delYes = !delYes; }
+          else if (e.code === 'Space' || e.key === 'Enter' || e.key === 'x' || e.key === 'X') {
+            e.preventDefault(); if (delYes) doDelete(); delConfirm = false;
+          }
+          return;
+        }
+        const items = scItems();
+        if (items && e.key === 'ArrowDown') { e.preventDefault(); scoreSel = (scoreSel + 1) % items; return; }
+        if (items && e.key === 'ArrowUp') { e.preventDefault(); scoreSel = (scoreSel <= 0 ? items : scoreSel) - 1; return; }
+        if (e.key === 'x' || e.key === 'X' || e.key === 'Delete') {
+          e.preventDefault(); if (scoreSel >= 0) { delConfirm = true; delYes = false; } return;
+        }
+        if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); init(); }
+        return;
+      }
+      if (state === 'idle' && e.key === 'ArrowUp') { e.preventDefault(); openScores(); return; }
       if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); primary(); }
+    });
+
+    // ===== mouse on the hall of fame (hover + click to delete) =====
+    const SC = { rowY0: 92, rowH: 36, rowW: 400, cfW: 420, cfH: 130, btnW: 110, btnH: 34 };
+    function canvasPos(e){
+      const r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+    }
+    function scoresRowAt(x, y){
+      if (Math.abs(x - W/2) > SC.rowW/2) return -1;
+      for (let i = 0; i < scItems(); i++){
+        const cy = SC.rowY0 + i*SC.rowH;
+        if (y > cy - SC.rowH/2 && y < cy + SC.rowH/2) return i;
+      }
+      return -1;
+    }
+    function confirmHit(x, y){
+      const by = H/2 + 24;
+      if (Math.abs(y - by) > SC.btnH/2) return null;
+      if (Math.abs(x - (W/2 - 75)) < SC.btnW/2) return 'no';
+      if (Math.abs(x - (W/2 + 75)) < SC.btnW/2) return 'yes';
+      return null;
+    }
+    canvas.addEventListener('mousemove', e => {
+      if (state !== 'scores' || delConfirm) return;
+      const p = canvasPos(e);
+      scoreSel = scoresRowAt(p.x, p.y);
+    });
+    canvas.addEventListener('click', e => {
+      if (state !== 'scores') { primary(); return; }
+      const p = canvasPos(e);
+      if (delConfirm) {
+        const hit = confirmHit(p.x, p.y);
+        if (hit) { if (hit === 'yes') doDelete(); delConfirm = false; }
+        return;
+      }
+      const row = scoresRowAt(p.x, p.y);
+      if (row >= 0) { scoreSel = row; delConfirm = true; delYes = false; }
+      else init();
     });
 
     // === background: dark + scrolling binary columns + ground ===
@@ -312,6 +408,8 @@
           ctx.fillStyle = '#c9ffe2'; ctx.font = '9px PixelArcade, monospace';
           ctx.fillText('CLICK / SPACE TO START', W/2, H/2 + 30);
         }
+        ctx.fillStyle = '#1f9c5e'; ctx.font = '7px PixelArcade, monospace';
+        ctx.fillText('▲ UP = HALL OF FAME', W/2, H/2 + 58);
       } else {
         ctx.fillStyle = '#ff5d5d'; ctx.font = '20px PixelArcade, monospace';
         ctx.fillText('GAME OVER', W/2, H/2 - 34);
@@ -328,44 +426,92 @@
       panel(0.92);
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = '#ffcf2e'; ctx.font = '15px PixelArcade, monospace';
-      ctx.fillText('NEW HIGH SCORE!', W/2, 78);
+      ctx.fillText('NEW HIGH SCORE!', W/2, 70);
       ctx.fillStyle = '#c9ffe2'; ctx.font = '10px PixelArcade, monospace';
-      ctx.fillText('SCORE ' + score, W/2, 108);
+      ctx.fillText('SCORE ' + score, W/2, 100);
       ctx.fillStyle = '#39ff8c'; ctx.font = '9px PixelArcade, monospace';
-      ctx.fillText('ENTER YOUR INITIALS', W/2, 150);
+      ctx.fillText('ENTER YOUR NAME', W/2, 140);
       ctx.textBaseline = 'middle';
-      for (let i = 0; i < 3; i++) {
-        const x = W/2 - 60 + i*60;
+      for (let i = 0; i < NAME_LEN; i++) {
+        const x = W/2 - ((NAME_LEN-1)*56)/2 + i*56;
         ctx.fillStyle = i === entryPos ? '#1f9c5e' : '#0d3a33';
-        ctx.fillRect(x-22, 176, 44, 52);
+        ctx.fillRect(x-22, 170, 44, 52);
         ctx.fillStyle = i === entryPos ? '#39ff8c' : '#155047';
-        ctx.fillRect(x-22, 176, 44, 3);
-        ctx.fillStyle = '#fff'; ctx.font = '24px PixelArcade, monospace';
-        ctx.fillText(entryName[i], x, 204);
+        ctx.fillRect(x-22, 170, 44, 3);
+        if (entryName[i] !== ' ') {
+          ctx.fillStyle = '#fff'; ctx.font = '24px PixelArcade, monospace';
+          ctx.fillText(entryName[i], x, 198);
+        }
         if (i === entryPos && Math.floor(tick/20)%2 === 0) {
           ctx.fillStyle = '#ffcf2e'; ctx.font = '10px PixelArcade, monospace';
-          ctx.fillText('▲', x, 162); ctx.fillText('▼', x, 246);
+          ctx.fillText('▲', x, 156); ctx.fillText('▼', x, 240);
         }
       }
       ctx.fillStyle = '#7e9a90'; ctx.font = '7px PixelArcade, monospace'; ctx.textBaseline = 'alphabetic';
-      ctx.fillText('UP/DOWN LETTER · L/R MOVE · SPACE OK', W/2, 300);
+      ctx.fillText('JOY: UP/DOWN CHAR · L/R MOVE · SPACE OK', W/2, 290);
+      ctx.fillText('OR TYPE A-Z 1-9 · BACKSPACE = ERASE', W/2, 312);
     }
 
     function drawScores() {
       panel(0.93);
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = '#39ff8c'; ctx.font = '16px PixelArcade, monospace';
-      ctx.fillText('HALL OF FAME', W/2, 58);
-      ctx.font = '12px PixelArcade, monospace';
+      ctx.fillText('HALL OF FAME', W/2, 48);
+      ctx.textBaseline = 'middle';
       scores.forEach((e, i) => {
-        const y = 104 + i*44;
+        const cy = SC.rowY0 + i*SC.rowH;
+        if (i === scoreSel) {
+          ctx.fillStyle = '#0d3a33'; ctx.fillRect(W/2-SC.rowW/2, cy-SC.rowH/2+3, SC.rowW, SC.rowH-6);
+          ctx.fillStyle = '#ff5d5d'; ctx.font = '11px PixelArcade, monospace';
+          ctx.textAlign = 'right'; ctx.fillText('✖', W/2+SC.rowW/2-12, cy);
+          ctx.textAlign = 'center';
+        }
         ctx.fillStyle = i === 0 ? '#ffcf2e' : '#c9ffe2';
-        ctx.fillText((i+1) + '.  ' + e.n + '   ' + String(e.s).padStart(5,'0'), W/2, y);
+        ctx.font = '12px PixelArcade, monospace';
+        ctx.fillText((i+1) + '. ' + e.n.padEnd(NAME_LEN) + ' ' + String(e.s).padStart(5,'0'), W/2, cy);
       });
+      if (!scores.length) {
+        ctx.fillStyle = '#3c5a52'; ctx.font = '9px PixelArcade, monospace';
+        ctx.fillText('NO RECORDS', W/2, SC.rowY0 + SC.rowH);
+      } else {
+        const cy = SC.rowY0 + scores.length*SC.rowH;
+        if (scoreSel === scores.length) {
+          ctx.fillStyle = '#3a0f12'; ctx.fillRect(W/2-SC.rowW/2, cy-SC.rowH/2+3, SC.rowW, SC.rowH-6);
+        }
+        ctx.fillStyle = scoreSel === scores.length ? '#ff5d5d' : '#7e4a4a';
+        ctx.font = '9px PixelArcade, monospace';
+        ctx.fillText('DELETE ALL RECORDS', W/2, cy);
+      }
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#3c5a52'; ctx.font = '7px PixelArcade, monospace';
+      ctx.fillText('↑↓ / MOUSE = SELECT · X / DEL / CLICK = DELETE', W/2, H - 44);
       if (Math.floor(tick/20)%2 === 0) {
         ctx.fillStyle = '#39ff8c'; ctx.font = '9px PixelArcade, monospace';
-        ctx.fillText('SPACE / CLICK = PLAY AGAIN', W/2, H - 18);
+        ctx.fillText('SPACE = PLAY AGAIN', W/2, H - 18);
       }
+      if (delConfirm) drawDelConfirm();
+    }
+
+    function drawDelConfirm(){
+      ctx.fillStyle = 'rgba(4,11,9,.9)';
+      ctx.fillRect(W/2-SC.cfW/2, H/2-SC.cfH/2, SC.cfW, SC.cfH);
+      ctx.strokeStyle = '#ff5d5d'; ctx.lineWidth = 3;
+      ctx.strokeRect(W/2-SC.cfW/2, H/2-SC.cfH/2, SC.cfW, SC.cfH);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff'; ctx.font = '10px PixelArcade, monospace';
+      const label = scoreSel === scores.length
+        ? 'DELETE ALL RECORDS?'
+        : 'DELETE ' + (scores[scoreSel] ? scores[scoreSel].n.trim() : '') + ' ?';
+      ctx.fillText(label, W/2, H/2 - 30);
+      [['NO', -75, !delYes], ['YES', 75, delYes]].forEach(([t, dx, on]) => {
+        const bx = W/2 + dx, by = H/2 + 24;
+        ctx.fillStyle = on ? (t === 'YES' ? '#7a1f1f' : '#1f9c5e') : '#0d3a33';
+        ctx.fillRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH);
+        if (on){ ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(bx-SC.btnW/2, by-SC.btnH/2, SC.btnW, SC.btnH); }
+        ctx.fillStyle = on ? '#fff' : '#7e9a90'; ctx.font = '11px PixelArcade, monospace';
+        ctx.fillText(t, bx, by);
+      });
+      ctx.textBaseline = 'alphabetic';
     }
 
     // one fixed 60Hz step of PLAY physics (frame-rate independent)
@@ -418,6 +564,7 @@
       else if (state === 'scores') drawScores();
       const help = document.getElementById('controlsHelp');
       if (help && !help.dataset.missing) help.classList.toggle('show', state === 'idle');
+      document.body.classList.toggle('allow-cursor', state === 'scores');
     }
 
     init();

@@ -206,9 +206,9 @@
     saveScores(scores);
     localStorage.setItem('sko_clip_ver', SEED_VERSION);
   }
-  // name entry: up to 5 chars, A-Z + 1-9, trailing blanks are trimmed
+  // name entry: up to 5 chars — A-Z, 1-9, '-', '/' and blank (space); trailing blanks are trimmed
   const NAME_LEN = 5;
-  const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789 ';
+  const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789-/ ';
   let entryName = ['A',' ',' ',' ',' '], entryPos = 0;
   function resetEntry(){ entryName = ['A',' ',' ',' ',' ']; entryPos = 0; }
   function cycleChar(dir){
@@ -501,8 +501,8 @@
     }
 
     if (state === 'enter'){
-      // direct typing (keyboard): letters + digits 1-9
-      if (/^[a-zA-Z0-9]$/.test(e.key)){
+      // direct typing (keyboard): letters, digits 1-9, '-' and '/'
+      if (/^[a-zA-Z0-9\/-]$/.test(e.key)){
         e.preventDefault();
         const ch = e.key.toUpperCase();
         if (NAME_CHARS.includes(ch)){ entryName[entryPos] = ch; if (entryPos < NAME_LEN-1) entryPos++; }
@@ -777,7 +777,7 @@
     }
     ctx.fillStyle = '#8aa6a0'; ctx.font = '6px PixelArcade, monospace'; ctx.textBaseline = 'alphabetic';
     ctx.fillText('UP/DOWN CHAR · L/R MOVE · SPACE OK', board.width/2, 286);
-    ctx.fillText('OR TYPE A-Z 1-9 · BKSP = ERASE', board.width/2, 304);
+    ctx.fillText('OR TYPE A-Z 1-9 - / · BKSP = ERASE', board.width/2, 304);
   }
 
   function actionRow(idx, label, danger){

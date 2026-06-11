@@ -67,8 +67,8 @@ function setActions(key,val,track){
 addEventListener('keydown',e=>{
   if(KEYMAP.menu.includes(e.key)){ location.href='../index.html'; return; }
   if(state==='enter'){
-    // direct typing (keyboard): letters + digits 1-9
-    if(/^[a-zA-Z0-9]$/.test(e.key)){
+    // direct typing (keyboard): letters, digits 1-9, '-' and '/'
+    if(/^[a-zA-Z0-9\/-]$/.test(e.key)){
       e.preventDefault();
       const ch=e.key.toUpperCase();
       if(NAME_CHARS.includes(ch)){ entryName[entryPos]=ch; if(entryPos<NAME_LEN-1) entryPos++; }
@@ -168,9 +168,9 @@ let scores=loadScores();
 /* seed jen při úplně prvním spuštění — smazaná tabulka zůstane prázdná */
 if(localStorage.getItem('sko_pro_scores')===null){ scores=[{n:'SKO',s:3000},{n:'PIL',s:2000},{n:'OT0',s:1200},{n:'AAA',s:600},{n:'BUG',s:200}]; saveScores(scores); }
 
-/* jméno: až 5 znaků, A-Z + 1-9, koncové mezery se ořežou */
+/* jméno: až 5 znaků — A-Z, 1-9, '-', '/' a prázdno (mezera); koncové mezery se ořežou */
 const NAME_LEN=5;
-const NAME_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789 ';
+const NAME_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789-/ ';
 function resetEntry(){ entryName=['A',' ',' ',' ',' ']; entryPos=0; }
 function cycleChar(dir){
   let i=NAME_CHARS.indexOf(entryName[entryPos]); if(i<0)i=0;
@@ -593,7 +593,7 @@ function drawEnter(){
   }
   ctx.fillStyle='#8aa'; ctx.font='9px PixelArcade, monospace';
   ctx.fillText('JOY UP/DOWN = CHAR · LEFT/RIGHT = MOVE · START = OK', W/2, 424);
-  ctx.fillText('OR TYPE A-Z 1-9 · BACKSPACE = ERASE', W/2, 448);
+  ctx.fillText('OR TYPE A-Z 1-9 - / · BACKSPACE = ERASE', W/2, 448);
 }
 
 const SC={ rowY0:190, rowH:48, rowW:560, cfW:460, cfH:150, btnW:120, btnH:40 };

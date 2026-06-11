@@ -71,7 +71,7 @@ Herní mechaniky:
 - **Časový limit** — Server Timeout odpočítává, spěchej!
 - **Bugy** — nepřátelé, kterým se musíš vyhnout nebo je zničit výstřelem
 - **Power‑upy** — ☕ zrychlení pohybu, 🛡 firewall (dočasná nezranitelnost)
-- **Síň slávy** — arkádové zadávání jména (až 5 znaků, A–Z + 1–9)
+- **Síň slávy** — arkádové zadávání jména (až 5 znaků: A–Z, 1–9, `-`, `/`, mezera)
 
 Technické detaily:
 - Rozlišení **4:3 (800×600)**, automaticky škáluje na celou obrazovku
@@ -92,7 +92,8 @@ Technické detaily:
 
 #### Síň slávy (Hall of Fame)
 
-- **Zadání jména:** až **5 znaků** (A–Z + číslice 1–9). Funguje arkádově
+- **Zadání jména:** až **5 znaků** (A–Z, číslice 1–9, pomlčka `-`, lomítko `/`
+  a prázdná pozice). Funguje arkádově
   joystickem (↑/↓ mění znak, ←/→ posouvá pozici, Start/Enter potvrdí) **i psaním
   na klávesnici** (Backspace maže). Kratší jméno necháš tak, že zbylé pozice
   necháš prázdné.

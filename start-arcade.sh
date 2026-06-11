@@ -29,11 +29,19 @@ fi
 : > "$LOG"
 log "start; session=${XDG_SESSION_TYPE:-?} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-} DISPLAY=${DISPLAY:-} pid=$$"
 
-# Najdi binárku Chromia (na Bookworm bývá 'chromium', na starších 'chromium-browser')
-if command -v chromium >/dev/null 2>&1; then
+# ── Volba prohlížeče ────────────────────────────────────────────────
+# Výchozí je Chromium. Když zlobí, přepneš na Firefox bez úprav skriptu:
+#   sudo apt install -y firefox
+#   SKOPILOT_BROWSER=firefox ~/skopilot-games/start-arcade.sh
+# (v autostartu: Exec=env SKOPILOT_BROWSER=firefox /home/pi/skopilot-games/start-arcade.sh)
+if [ -n "${SKOPILOT_BROWSER:-}" ]; then
+  BROWSER="$SKOPILOT_BROWSER"
+elif command -v chromium >/dev/null 2>&1; then
   BROWSER=chromium
 elif command -v chromium-browser >/dev/null 2>&1; then
   BROWSER=chromium-browser
+elif command -v firefox >/dev/null 2>&1; then
+  BROWSER=firefox
 else
   echo "Chromium není nainstalovaný. Spusť: sudo apt install -y chromium-browser" >&2
   exit 1
@@ -107,24 +115,46 @@ if [ -f "$BLANK_THEME/cursors/left_ptr" ]; then
   export XCURSOR_PATH="$HOME/.icons:/usr/share/icons"
 fi
 
+# ── Firefox kiosk (alternativa, když Chromium zlobí) ────────────────
+case "$BROWSER" in
+  *firefox*)
+    export MOZ_ENABLE_WAYLAND=1
+    log "launching $BROWSER (kiosk)"
+    exec "$BROWSER" --kiosk "$URL"
+    ;;
+esac
+
+# ── Chromium kiosk ──────────────────────────────────────────────────
+# Vlastní trvalý profil: highscory (localStorage) přežijí restart —
+# dřívější --incognito je mazal při každém vypnutí automatu.
+PROFILE="$HOME/.config/skopilot-kiosk"
+mkdir -p "$PROFILE"
+
 # Smaž případný „crash" dialog, aby kiosk vždy naběhl čistě
-PREF="$HOME/.config/chromium/Default/Preferences"
+PREF="$PROFILE/Default/Preferences"
 [ -f "$PREF" ] && sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/' "$PREF" || true
 
-log "launching $BROWSER"
+# Vynuť X11 backend (XWayland): nativní Wayland backend Chromia má na
+# otočených displejích chyby v geometrii fullscreen oken — okno se po
+# startu srazí do pruhu. Přepsat jde přes SKOPILOT_OZONE=wayland.
+OZONE="${SKOPILOT_OZONE:-x11}"
+
+log "launching $BROWSER (ozone=$OZONE, profile=$PROFILE)"
 exec "$BROWSER" \
   --kiosk \
   --start-fullscreen \
   --window-position=0,0 \
   --window-size="${SCR_W},${SCR_H}" \
-  --ozone-platform-hint=auto \
+  --ozone-platform="$OZONE" \
+  --user-data-dir="$PROFILE" \
+  --no-first-run \
+  --no-default-browser-check \
   --noerrordialogs \
   --disable-infobars \
   --disable-session-crashed-bubble \
   --disable-features=Translate,TranslateUI \
   --disable-translate \
   --overscroll-history-navigation=0 \
-  --incognito \
   --password-store=basic \
   --check-for-update-interval=31536000 \
   "$URL"

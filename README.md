@@ -280,6 +280,26 @@ s tímto výchozím rozložením:
        ~/.config/labwc ~/.config/wayfire.ini 2>/dev/null
   ```
   Nech jen jeden (doporučeně `~/.config/autostart/skopilot.desktop`).
+- **Okno pořád skáče do pruhu — co zkusit po krocích:**
+  1. **Výchozí stav** (po aktualizaci): Chromium nyní běží vynuceně přes
+     **X11 backend (XWayland)** — nativní Wayland backend Chromia má na
+     otočených displejích chyby v geometrii fullscreenu. Restartuj a sleduj
+     `tail ~/skopilot-arcade.log` (uvidíš `ozone=x11`).
+  2. **Jiný prohlížeč — Firefox:**
+     ```bash
+     sudo apt install -y firefox
+     SKOPILOT_BROWSER=firefox ~/skopilot-games/start-arcade.sh   # ruční test
+     ```
+     Když funguje, uprav autostart:
+     `Exec=env SKOPILOT_BROWSER=firefox /home/pi/skopilot-games/start-arcade.sh`
+  3. **Přepnout celý systém na X11** (nejjistější pro kiosky):
+     `sudo raspi-config` → **Advanced Options** → **Wayland** → **X11**,
+     restart. Pro arkádový automat to nemá žádné nevýhody.
+  4. Návrat na Wayland backend Chromia (kdyby bylo potřeba):
+     `SKOPILOT_OZONE=wayland ~/skopilot-games/start-arcade.sh`.
+- **Highscory se po restartu mazaly:** kiosk dříve běžel s `--incognito`,
+  takže `localStorage` (síň slávy, BEST) po vypnutí zmizel. Nyní má kiosk
+  vlastní trvalý profil `~/.config/skopilot-kiosk` a rekordy přežijí restart.
 - **Obraz je menší než displej:** hry se škálují podle okna — v kiosku Chromia
   to sedí samo. Pokud testuješ v okně, roztáhni ho na celou plochu.
 - **Obrazovka po chvíli zhasne:** dokonči krok A (Screen Blanking → No).

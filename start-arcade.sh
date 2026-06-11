@@ -12,9 +12,22 @@ URL="file://$APP_DIR/index.html"
 # Každý start zapíše průběh do ~/skopilot-arcade.log — když kiosk
 # nenaběhne přes celou obrazovku, podívej se sem: tail ~/skopilot-arcade.log
 LOG="$HOME/skopilot-arcade.log"
-: > "$LOG"
 log(){ echo "[$(date '+%H:%M:%S')] $*" >> "$LOG"; }
-log "start; session=${XDG_SESSION_TYPE:-?} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-} DISPLAY=${DISPLAY:-}"
+
+# ── Pojistka proti dvojímu spuštění ─────────────────────────────────
+# Když je skript v autostartu na víc místech (XDG autostart, lxsession,
+# labwc/wayfire…), spustí se dvakrát. Druhé Chromium se připojí k už
+# běžící instanci a otevře NOVÉ malé okno bez kiosk/fullscreen flagů —
+# přesně ten „pruh" přes část obrazovky. Zámek drží i běžící Chromium
+# (zdědí otevřený deskriptor), takže opakovaný start nic nerozbije.
+exec 9>"$HOME/.skopilot-arcade.lock"
+if ! flock -n 9; then
+  log "druhý start zablokován — kiosk už běží (zkontroluj duplicitní autostart)"
+  exit 0
+fi
+
+: > "$LOG"
+log "start; session=${XDG_SESSION_TYPE:-?} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-} DISPLAY=${DISPLAY:-} pid=$$"
 
 # Najdi binárku Chromia (na Bookworm bývá 'chromium', na starších 'chromium-browser')
 if command -v chromium >/dev/null 2>&1; then

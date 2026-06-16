@@ -170,7 +170,10 @@
     let scoreSel = -1, delConfirm = false, delYes = false, manage = false;
     // rows: main view = records + MANAGE; manage view = records + DELETE ALL + BACK
     function scRows(){ return manage ? scores.length + 2 : scores.length + 1; }
-    function openScores(){ scoreSel = -1; delConfirm = false; manage = false; state = 'scores'; }
+    // hall of fame: after 60 s of inactivity, return to the start screen (attract mode)
+    const SCORES_TIMEOUT = 60000; let scoresActivityTs = 0;
+    function bumpScores(){ scoresActivityTs = performance.now(); }
+    function openScores(){ scoreSel = -1; delConfirm = false; manage = false; state = 'scores'; bumpScores(); }
     function enterManage(){ manage = true; delConfirm = false; scoreSel = scores.length ? 0 : 1; }
     function activateManage(){
       if (scoreSel === scores.length + 1){ manage = false; scoreSel = -1; }   // BACK
@@ -229,6 +232,7 @@
 
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { location.href = '../index.html'; return; }
+      if (state === 'scores') bumpScores();
       if (state === 'enter') {
         if (entryConfirm) {
           if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); entryYes = !entryYes; }
@@ -314,6 +318,7 @@
     }
     canvas.addEventListener('mousemove', e => {
       if (state !== 'scores' || delConfirm) return;
+      bumpScores();
       const p = canvasPos(e);
       const row = scoresRowAt(p.x, p.y);
       if (manage) { if (row >= 0) scoreSel = row; }
@@ -321,6 +326,7 @@
     });
     canvas.addEventListener('click', e => {
       if (state !== 'scores') { primary(); return; }
+      bumpScores();
       const p = canvasPos(e);
       if (delConfirm) {
         const hit = confirmHit(p.x, p.y);
@@ -629,6 +635,7 @@
       } else {
         acc = 0;
       }
+      if (state === 'scores' && ts - scoresActivityTs > SCORES_TIMEOUT) init();
       drawSky();
       for (let p of pipes) drawPipe(p);
       for (let p of pipes) drawCoin(p);

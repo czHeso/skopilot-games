@@ -66,6 +66,7 @@ function setActions(key,val,track){
 }
 addEventListener('keydown',e=>{
   if(KEYMAP.menu.includes(e.key)){ location.href='../index.html'; return; }
+  if(state==='scores') bumpScores();
   if(state==='enter'){
     if(entryConfirm){
       if(e.key==='Backspace'){ e.preventDefault(); entryConfirm=false; return; }
@@ -96,6 +97,17 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>setActions(e.key,false,false));
 function consume(a){ if(justAction[a]){ justAction[a]=false; return true; } return false; }
+/* držení joysticku = opakování (arcade name entry): první stisk hned, pak po krátké prodlevě auto-repeat */
+const REPEAT_DELAY=22, REPEAT_RATE=5; const heldFrames={};
+function repeatAction(a){
+  if(!action[a]){ heldFrames[a]=0; return false; }
+  if(justAction[a]){ justAction[a]=false; heldFrames[a]=0; return true; }
+  heldFrames[a]=(heldFrames[a]||0)+1;
+  return heldFrames[a]>=REPEAT_DELAY && (heldFrames[a]-REPEAT_DELAY)%REPEAT_RATE===0;
+}
+/* síň slávy: po 60 s nečinnosti zpět na úvodní obrazovku (attract mode) */
+const SCORES_TIMEOUT=60000; let scoresActivityTs=0;
+function bumpScores(){ scoresActivityTs=performance.now(); }
 
 /* ===================== SETUP ===================== */
 const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
@@ -187,7 +199,7 @@ function cycleChar(dir){
 let scoreSel=-1, delConfirm=false, delYes=false, manage=false;
 /* řádky: hlavní pohled = záznamy + MANAGE; manage = záznamy + DELETE ALL + BACK */
 function scRows(){ return manage ? scores.length+2 : scores.length+1; }
-function openScores(){ scoreSel=-1; delConfirm=false; manage=false; state='scores'; }
+function openScores(){ scoreSel=-1; delConfirm=false; manage=false; state='scores'; bumpScores(); }
 function enterManage(){ manage=true; delConfirm=false; scoreSel=scores.length?0:1; }
 function activateManage(){
   if(scoreSel===scores.length+1){ manage=false; scoreSel=-1; }   // BACK
@@ -332,10 +344,10 @@ function updateEnter(){
     }
     return;
   }
-  if(consume('up')) cycleChar(1);
-  if(consume('down')) cycleChar(-1);
-  if(consume('right')){ entryPos=(entryPos+1)%NAME_LEN; }
-  if(consume('left')){ entryPos=(entryPos+NAME_LEN-1)%NAME_LEN; }
+  if(repeatAction('up')) cycleChar(1);
+  if(repeatAction('down')) cycleChar(-1);
+  if(repeatAction('right')){ entryPos=(entryPos+1)%NAME_LEN; }
+  if(repeatAction('left')){ entryPos=(entryPos+NAME_LEN-1)%NAME_LEN; }
   if(consume('start')){ entryConfirm=true; entryYes=false; }
 }
 
@@ -731,6 +743,7 @@ function confirmHit(x,y){
 }
 canvas.addEventListener('mousemove',e=>{
   if(state!=='scores'||delConfirm) return;
+  bumpScores();
   const p=canvasPos(e);
   const row=scoresRowAt(p.x,p.y);
   if(manage){ if(row>=0) scoreSel=row; }
@@ -738,6 +751,7 @@ canvas.addEventListener('mousemove',e=>{
 });
 canvas.addEventListener('click',e=>{
   if(state!=='scores') return;
+  bumpScores();
   const p=canvasPos(e);
   if(delConfirm){
     const hit=confirmHit(p.x,p.y);
@@ -773,6 +787,7 @@ function loop(ts){
   requestAnimationFrame(loop);
   if(!lastTs)lastTs=ts; acc+=Math.min(ts-lastTs,100); lastTs=ts;
   while(acc>=STEP){ acc-=STEP; update(); }
+  if(state==='scores' && ts-scoresActivityTs>SCORES_TIMEOUT) initTitle();
   if(state==='title') drawTitle();
   else if(state==='play') drawScene();
   else if(state==='clear') drawClear();

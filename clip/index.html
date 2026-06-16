@@ -223,7 +223,10 @@
   let scoreSel = -1, delConfirm = false, delYes = false, manage = false;
   // rows: main view = records + MANAGE; manage view = records + DELETE ALL + BACK
   function scRows(){ return manage ? scores.length + 2 : scores.length + 1; }
-  function openScores(){ scoreSel = -1; delConfirm = false; manage = false; state = 'scores'; }
+  // hall of fame: after 60 s of inactivity, return to the start screen (attract mode)
+  const SCORES_TIMEOUT = 60000; let scoresActivityTs = 0;
+  function bumpScores(){ scoresActivityTs = performance.now(); }
+  function openScores(){ scoreSel = -1; delConfirm = false; manage = false; state = 'scores'; bumpScores(); }
   function enterManage(){ manage = true; delConfirm = false; scoreSel = scores.length ? 0 : 1; }
   function activateManage(){
     if (scoreSel === scores.length + 1){ manage = false; scoreSel = -1; }   // BACK
@@ -494,6 +497,7 @@
   // ====== controls ======
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape'){ location.href = '../index.html'; return; }
+    if (state === 'scores') bumpScores();
 
     if (state === 'playing'){
       switch (e.key){
@@ -595,6 +599,7 @@
   }
   board.addEventListener('mousemove', e => {
     if (state !== 'scores' || delConfirm) return;
+    bumpScores();
     const p = canvasPos(e);
     const row = scoresRowAt(p.x, p.y);
     if (manage){ if (row >= 0) scoreSel = row; }
@@ -603,6 +608,7 @@
   board.addEventListener('click', e => {
     if (state === 'playing' || state === 'enter') return;
     if (state !== 'scores'){ primary(); return; }
+    bumpScores();
     const p = canvasPos(e);
     if (delConfirm){
       const hit = confirmHit(p.x, p.y);
@@ -928,6 +934,8 @@
     lastT = now;
 
     if (state === 'scores' || state === 'enter') timeEl.textContent = fmt(finalCs);
+
+    if (state === 'scores' && now - scoresActivityTs > SCORES_TIMEOUT){ resetBoard(); state = 'idle'; }
 
     // particles + flash
     for (const p of particles){ p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life -= 0.03; }

@@ -46,6 +46,10 @@
   /* GAMES (left) */
   #games{flex:1.5;min-width:0;display:flex;flex-direction:column;
     justify-content:center;gap:clamp(12px,2.6vh,30px);}
+  /* 4 kategorie (odemčený ŠkoDoom) → mřížka 2×2, ať se vše vejde na obrazovku */
+  body.grid4 #games{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+    align-content:center;column-gap:clamp(10px,1.6vw,26px);row-gap:clamp(10px,2vh,24px);}
+  body.grid4 .card{width:clamp(130px,14vw,200px);}
   .cat-head{display:flex;align-items:center;gap:10px;
     font-size:clamp(9px,1.4vw,15px);color:var(--green);letter-spacing:3px;
     margin-bottom:clamp(8px,1.3vh,13px);text-shadow:0 0 8px rgba(57,255,140,.45);}
@@ -200,6 +204,20 @@
       <g transform="translate(118,40)" fill="none" stroke="#a9c4ba" stroke-width="2" stroke-dasharray="4 3">
         <rect x="-13" y="2" width="26" height="20"/><rect x="-7" y="-10" width="14" height="14"/></g>
       <image href="${HEAD}" x="16" y="82" width="22" height="22"/></svg>`,
+
+    doom:`<svg viewBox="0 0 160 120" preserveAspectRatio="none" shape-rendering="crispEdges">
+      <rect width="160" height="120" fill="#0a0503"/>
+      <g fill="#2a0d0a"><polygon points="0,0 60,35 60,85 0,120"/><polygon points="160,0 100,35 100,85 160,120"/></g>
+      <g fill="#3a120c"><polygon points="0,0 60,35 100,35 160,0"/></g>
+      <g fill="#141008"><polygon points="0,120 60,85 100,85 160,120"/></g>
+      <rect x="60" y="35" width="40" height="50" fill="#1c0806"/>
+      <rect x="60" y="35" width="40" height="3" fill="#9c2f1f"/>
+      <g fill="#39ff8c" opacity=".8"><rect x="20" y="40" width="3" height="30"/><rect x="137" y="40" width="3" height="30"/></g>
+      <rect x="74" y="48" width="12" height="20" fill="#ffcf2e"/><rect x="77" y="52" width="6" height="12" fill="#5a2000"/>
+      <image href="${HEAD}" x="58" y="78" width="44" height="34"/>
+      <g fill="#0d2a22"><rect x="62" y="86" width="16" height="5" transform="rotate(14 70 88)"/>
+        <rect x="82" y="86" width="16" height="5" transform="rotate(-14 90 88)"/></g>
+      <text x="80" y="26" font-family="monospace" font-size="13" font-weight="bold" fill="#ff5d3d" text-anchor="middle">SKODOOM</text></svg>`,
   };
 
   const CATS = [
@@ -210,6 +228,13 @@
     { head:'ŠKOPILOT PRO', items:[
       { playable:true, title:'ŠKOPILOT PRO', genre:'AGENT BUILDER', url:'pro/index.html', hi:'sko_pro_best', art:ART.pro } ] },
   ];
+
+  /* tajná hra — karta se ukáže až po prvním odemčení (IDDQD / DOOM / ↑↑↓↓←→←→) */
+  if(localStorage.getItem('sko_doom_unlocked')==='1'){
+    CATS.push({ head:'? ? ?', items:[
+      { playable:true, title:'ŠKODOOM', genre:'SECRET &middot; DATA HELL FPS', url:'doom/index.html', hi:'sko_doom_best', secret:true, art:ART.doom } ] });
+    document.body.classList.add('grid4');
+  }
 
   function fmtTime(cs){
     const m=Math.floor(cs/6000), s=Math.floor((cs%6000)/100), c=cs%100;
@@ -231,7 +256,7 @@
         if(it.time){ hiTxt = hi ? ('BEST '+fmtTime(+hi)) : 'BEST --'; }
         else { hiTxt = 'HI '+String(hi).padStart(5,'0'); }
         card.className='card';
-        card.innerHTML='<div class="frame">'+it.art+'</div><div class="cap">'+it.title+'</div>'+
+        card.innerHTML='<div class="frame">'+(it.secret?'<div class="ribbon">SECRET</div>':'')+it.art+'</div><div class="cap">'+it.title+'</div>'+
           '<div class="genre">'+it.genre+'</div><div class="hi">'+hiTxt+'</div>';
         const idx=playables.length;
         playables.push({url:it.url,card});
@@ -253,12 +278,44 @@
   render();
 
   addEventListener('keydown',e=>{
+    secretKey(e.key);
     switch(e.key){
       case 'ArrowRight': case 'd': case 'ArrowDown': case 's': sel=(sel+1)%playables.length; render(); break;
       case 'ArrowLeft': case 'a': case 'ArrowUp': case 'w': sel=(sel-1+playables.length)%playables.length; render(); break;
       case 'Enter': case ' ': e.preventDefault(); launch(); break;
     }
   });
+
+  // ===== tajný kód: napiš IDDQD nebo DOOM, případně joystick ↑↑↓↓←→←→ =====
+  let typedBuf='', stickBuf=[], unlocking=false;
+  const STICK_CODE=['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight'];
+  function secretKey(key){
+    if(unlocking) return;
+    if(/^[a-zA-Z]$/.test(key)){
+      typedBuf=(typedBuf+key.toLowerCase()).slice(-5);
+      if(typedBuf.endsWith('iddqd')||typedBuf.endsWith('doom')) unlockDoom();
+    }
+    if(key.startsWith('Arrow')){
+      stickBuf.push(key); stickBuf=stickBuf.slice(-8);
+      if(stickBuf.length===8 && stickBuf.every((k,i)=>k===STICK_CODE[i])) unlockDoom();
+    }
+  }
+  function unlockDoom(){
+    if(unlocking) return; unlocking=true;
+    localStorage.setItem('sko_doom_unlocked','1');
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:99;background:#050403;display:flex;'+
+      'align-items:center;justify-content:center;flex-direction:column;gap:22px;'+
+      'font-family:PixelArcade,monospace;animation:doomIn .3s steps(3)';
+    ov.innerHTML='<style>@keyframes doomIn{0%{opacity:0;filter:hue-rotate(90deg)}50%{opacity:1;filter:invert(1)}100%{opacity:1}}'+
+      '@keyframes doomGlitch{0%,100%{transform:translate(0)}25%{transform:translate(-4px,2px)}75%{transform:translate(4px,-2px)}}</style>'+
+      '<div style="font-size:clamp(26px,6vw,64px);color:#ff5d3d;letter-spacing:6px;'+
+        'text-shadow:0 0 24px rgba(255,60,40,.8),4px 4px 0 #2a0d0a;animation:doomGlitch .18s infinite">ŠKODOOM</div>'+
+      '<div style="font-size:clamp(9px,1.4vw,14px);color:#39ff8c;letter-spacing:3px">TAJNÁ HRA ODEMČENA</div>'+
+      '<div style="font-size:clamp(7px,1vw,10px);color:#7e9a90">VSTUPUJEŠ DO DATOVÉHO PEKLA...</div>';
+    document.body.appendChild(ov);
+    setTimeout(()=>{ window.location.href='doom/index.html'; }, 1600);
+  }
 
   // ===== 8bit binary rain (matrix-style 0/1, ŠkoPilot green) =====
   const fx=document.getElementById('fx'), fc=fx.getContext('2d');

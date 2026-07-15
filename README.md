@@ -26,6 +26,7 @@ Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený d
 | `flappy/` | **Flappy ŠkoPilot** | letová obratnost | Mezerník / klik = skok |
 | `clip/` | **ŠkoPilot Clip** | Tetris na čas | šipky = posun, **↑/X** = rotace, Mezerník = hard drop |
 | `pro/` | **ŠkoPilot Pro** | plošinovka, stavba agenta | šipky/joystick + skok, **X** = výstřel |
+| `doom/` | **ŠkoDoom** 🤫 | tajná hra — retro FPS | viz níže… pokud ji najdeš |
 
 ---
 
@@ -80,6 +81,54 @@ Technické detaily:
 
 > **Zajímavost:** Celý herní engine (fyzika, render loop, správa entit, input) je
 > napsaný v ~600 řádcích vanilla JS. Žádný Phaser, žádný PixiJS.
+
+---
+
+### 🤫 ŠkoDoom — tajná hra (Episode 1: Data Hell)
+
+> V mladoboleslavském cloudu se přemnožily bugy, spam démoni a halucinace
+> modelů. Někdo nasadil do pipeline neotestovaný kód… v pátek. ŠkoPilot bere
+> služební **DATOMET** a sestupuje do datového pekla. Nikdo jiný to neuklidí.
+
+Plnohodnotný **retro FPS ve stylu prvního DOOMu** — 2D mapa renderovaná
+raycastingem do pseudo-3D, přesně jako v roce 1993. Celý engine je vanilla JS.
+
+**Jak hru odemknout** (na úvodní obrazovce launcheru):
+
+- napiš na klávesnici **`IDDQD`** nebo **`DOOM`**, případně
+- zadej joystickem **↑ ↑ ↓ ↓ ← → ← →**.
+
+Po prvním odemčení se hra objeví v menu jako karta **? ? ?** se stuhou SECRET
+(pamatuje se přes `localStorage`).
+
+**Co uvnitř najdeš:**
+
+- **3 levely** — E1M1 Serverovna, E1M2 Výrobní hala, E1M3 Datové peklo
+- **4 druhy nepřátel** ze ŠkoPilot univerza: bug (kouše), spam e‑mail (střílí),
+  papírová hydra a **stroj** — boss, který střílí dvojité salvy
+- **Texturované stěny** — obvody, serverové racky s blikajícími LED, cihly
+  s výstražným pruhem a **bannery s hlavou ŠkoPilota** (v pekle visí jejich
+  potrhaná rudá verze se zlýma očima)
+- **Posuvné dveře**, **tajné chodby** (prasklé zdi — zatlač na ně tlačítkem X),
+  itemy: ☕ káva +25 HP, 💾 disketa +12 nábojů, 🛡 firewall +25 armor a ukrytý
+  **služební vůz** za 500 bodů
+- **DOOM-style HUD** — dole náboje/zdraví/armor a uprostřed živá hlava
+  ŠkoPilota, která při zásahu trpí
+- Statistiky po levelu (zabití/předměty/tajemství v %, čas vs. PAR),
+  **minimapa** (Tab), síň slávy, procedurální hudba i zvuky (WebAudio)
+
+**Ovládání:** šipky/joystick = pohyb a otáčení, **Mezerník** = palba,
+**X** (držet) = úkrok + tlačení tajných zdí, **Tab** = minimapa, **P** = pauza,
+**ESC** = menu. Na klávesnici funguje i **WASD** (A/D = úkrok).
+
+**Cheaty:** jako ve správném DOOMu — během hry napiš `IDDQD` (nesmrtelnost)
+nebo `IDKFA` (plné náboje + armor).
+
+> **Zajímavost:** Hra nemá jediný externí obrázek textur — všechny stěny
+> (obvody, racky, bannery s maskotem) se **generují procedurálně** při startu
+> na 64×64 canvasech. Sprity nepřátel a itemů jsou původní 8‑bit assety
+> z `assets/8bit/`. Render běží v interním rozlišení **320×200** (jako
+> originál) a škáluje se na 800×500 + 100 px HUD.
 
 ---
 
@@ -152,7 +201,7 @@ cd skopilot-games
 
 > Dokud změny nejsou v `main`, přepni na vývojovou větev:
 > ```bash
-> git checkout claude/dazzling-ptolemy-cOulb
+> git checkout claude/skodoom-game-ot3wn8
 > ```
 
 Aktualizace později:
@@ -331,8 +380,10 @@ skopilot-games/
 │   └── index.html      # Celá hra v jednom souboru (~300 řádků JS)
 ├── clip/
 │   └── index.html      # Tetris na čas (~500 řádků JS)
-└── pro/
-    └── index.html      # Plošinovka Agent Builder (~600 řádků JS)
+├── pro/
+│   └── index.html      # Plošinovka Agent Builder (~600 řádků JS)
+└── doom/
+    └── index.html      # ŠkoDoom — tajný raycasting FPS (~1200 řádků JS)
 ```
 
 Každá hra je **jeden samostatný HTML soubor** — žádné importy, žádné moduly,

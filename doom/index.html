@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ŠkoDoom — Knee-Deep in the Bugs</title>
+  <style>
+    @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    *{cursor:none !important;}   /* kiosk: hide mouse cursor (Wayland-safe) */
+    body.allow-cursor, body.allow-cursor *{cursor:auto !important;}
+    html,body{height:100%;}
+    body{background:#050403;display:flex;align-items:center;justify-content:center;height:100vh;
+      overflow:hidden;font-family:'PixelArcade','Courier New',monospace;color:#eef6f4;user-select:none;
+      image-rendering:pixelated;}
+    #bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+      background:radial-gradient(ellipse at 50% 40%, rgba(30,8,8,.5), rgba(5,4,3,.96) 80%),
+                 url('../assets/8bit/circuit.jpg') center/cover no-repeat; opacity:.3;
+      filter:hue-rotate(-90deg) saturate(1.4);}
+    body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);}
+    #stage{transform-origin:center center;position:relative;z-index:3;}
+    canvas#c{display:block;background:#000;border:3px solid #4a1512;image-rendering:pixelated;
+      box-shadow:0 0 0 3px #050403, 0 0 0 5px #2a0f0c, 0 0 36px rgba(255,60,40,.22), 0 0 60px rgba(57,255,140,.10);}
+    #menuBtn{position:fixed;top:14px;left:14px;z-index:60;background:#180c0c;color:#ffd7c9;
+      border:2px solid #9c2f1f;padding:9px 14px;font-size:10px;letter-spacing:1px;
+      cursor:pointer;font-family:inherit;box-shadow:0 0 0 2px #050403, 0 0 14px rgba(255,93,61,.25);}
+    #menuBtn:hover{background:#2a1210;color:#ff8c6b;}
+  </style>
+</head>
+<body>
+  <div id="bg"></div>
+  <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
+  <div id="stage"><canvas id="c" width="800" height="600"></canvas></div>
+<script>
+'use strict';
+/* =====================================================================
+   ŠkoDoom — tajná hra ŠkoPilot Family.
+   Raycasting engine ve stylu prvního DOOMu (2D mapa, pseudo-3D render),
+   grafika: ŠkoPilot assety (8bit nepřátelé, itemy, hlava maskota v HUD).
+   Vše vanilla JS + Canvas, žádné závislosti, funguje offline z file://.
+   ===================================================================== */
+
+/* ===================== INPUT MANAGER (config) ===================== */
+/* Arcade1Up bývá mapovaný jako USB klávesnice. Uprav podle svého enkodéru. */
+const KEYMAP = {
+  fwd:    ['ArrowUp','w','W'],
+  back:   ['ArrowDown','s','S'],
+  left:   ['ArrowLeft'],            // otáčení (s X = úkrok)
+  right:  ['ArrowRight'],
+  sleft:  ['a','A','q','Q'],        // úkrok (strafe) na klávesnici
+  sright: ['d','D','e','E'],
+  fire:   [' ','z','Z','Control'],  // tlačítko 1
+  strafe: ['x','X','Alt','Shift'],  // tlačítko 3 (drž + ←/→ = úkrok)
+  start:  ['Enter'],
+  pause:  ['p','P'],
+  map:    ['Tab','m','M'],
+  menu:   ['Escape'],
+};
+const action={}, justAction={};
+function setActions(key,val,track){
+  for(const a in KEYMAP){ if(KEYMAP[a].includes(key)){ if(val && !action[a] && track) justAction[a]=true; action[a]=val; } }
+}
+let cheatBuf='';
+addEventListener('keydown',e=>{
+  if(KEYMAP.menu.includes(e.key)){ location.href='../index.html'; return; }
+  if(/^[a-zA-Z]$/.test(e.key)){ cheatBuf=(cheatBuf+e.key.toLowerCase()).slice(-8); checkCheats(); }
+  if(state==='enter'){ if(nameEntryKey(e)) return; }
+  if(state==='title' && (e.key==='Backspace' || e.key==='ArrowUp')){ e.preventDefault(); openScores(); return; }
+  if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.key)) e.preventDefault();
+  setActions(e.key,true,true);
+  wakeAudio();
+});
+addEventListener('keyup',e=>setActions(e.key,false,false));
+function consume(a){ if(justAction[a]){ justAction[a]=false; return true; } return false; }
+
+/* DOOM cheaty — samozřejmě fungují i tady */
+let god=false;
+function checkCheats(){
+  if(state!=='play') return;
+  if(cheatBuf.endsWith('iddqd')){ god=!god; pl.hp=100; toast(god?'REZIM NESMRTELNOSTI':'NESMRTELNOST VYPNUTA'); cheatBuf=''; sfx('secret'); }
+  if(cheatBuf.endsWith('idkfa')){ pl.ammo=AMMO_MAX; pl.armor=100; toast('PLNA POLNI!'); cheatBuf=''; sfx('secret'); }
+}
+
+/* ===================== SETUP ===================== */
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+const stage=document.getElementById('stage');
+const W=canvas.width, H=canvas.height;          // 800×600 (view 800×500 + HUD 800×100)
+const VIEW_H=500, HUD_H=100;
+function fit(){ const s=Math.min(innerWidth/stage.offsetWidth, innerHeight/stage.offsetHeight); stage.style.transform='scale('+s+')'; }
+addEventListener('resize',fit); addEventListener('load',fit); fit();
+
+/* nízké interní rozlišení pro autentické tlusté pixely */
+const RW=320, RH=200;
+const buf=document.createElement('canvas'); buf.width=RW; buf.height=RH;
+const bctx=buf.getContext('2d'); bctx.imageSmoothingEnabled=false;
+const frame=bctx.createImageData(RW,RH);
+const fb=new Uint32Array(frame.data.buffer);    // ABGR (little-endian)
+const zbuf=new Float32Array(RW);
+
+/* ===================== ASSETY (ŠkoPilot grafika) ===================== */
+function img(src){ const i=new Image(); i.src=src; return i; }
+const SPR = {
+  bug:     img('../assets/8bit/enemies/bug.png'),
+  email:   img('../assets/8bit/enemies/email.png'),
+  paper:   img('../assets/8bit/enemies/paper.png'),
+  machine: img('../assets/8bit/enemies/machine.png'),
+  coffee:  img('../assets/8bit/items/coffee.png'),
+  shield:  img('../assets/8bit/items/shield.png'),
+  floppy:  img('../assets/8bit/items/floppy.png'),
+  car:     img('../assets/8bit/items/car_green.png'),
+};
+const headImg = img('../assets/skopilotHead.png');
+const headBig = img('../assets/8bit/skopilot-head.png');
+const runImg  = img('../assets/skopilot_run.png');
+
+/* HUD hlava s nádechem bolesti — kompozitovaná na offscreen (bez čtení pixelů,
+   takže žádný tainted-canvas problém na file://) */
+const faceCv=document.createElement('canvas'); faceCv.width=96; faceCv.height=72;
+const faceCtx=faceCv.getContext('2d');
+function drawFace(hurt, dead){
+  faceCtx.clearRect(0,0,96,72);
+  if(!headImg.complete || !headImg.naturalWidth) return;
+  faceCtx.save();
+  if(dead){ faceCtx.translate(48,40); faceCtx.rotate(Math.PI/2); faceCtx.translate(-48,-36); }
+  faceCtx.drawImage(headImg,4,2,88,64);
+  faceCtx.globalCompositeOperation='source-atop';
+  if(dead){ faceCtx.fillStyle='rgba(120,20,20,.55)'; faceCtx.fillRect(0,0,96,72); }
+  else if(hurt>0){ faceCtx.fillStyle='rgba(255,30,20,'+(0.55*hurt)+')'; faceCtx.fillRect(0,0,96,72); }
+  faceCtx.restore();
+}
+
+/* ===================== TEXTURY (64×64, procedurální pixel-art) ===================== */
+const TS=64;
+function makeTex(fn){
+  const c=document.createElement('canvas'); c.width=TS; c.height=TS;
+  const g=c.getContext('2d'); fn(g);
+  return new Uint32Array(g.getImageData(0,0,TS,TS).data.buffer).slice();
+}
+function px(g,x,y,w,h,col){ g.fillStyle=col; g.fillRect(x,y,w,h); }
+function noise(g,c1,c2,d){ for(let y=0;y<TS;y++)for(let x=0;x<TS;x++){ if(((x*7+y*13+((x*y)^(x+y*31)))%17)<d) px(g,x,y,1,1,((x^y)&1)?c1:c2); } }
+/* mini pixel písmo pro textury (3×5) */
+const PFONT={E:[7,4,7,4,7],X:[5,5,2,5,5],I:[7,2,2,2,7],T:[7,2,2,2,2],
+  S:[7,4,7,1,7],K:[5,6,4,6,5],O:[7,5,5,5,7],D:[6,5,5,5,6],A:[7,5,7,5,5],P:[7,5,7,4,4],L:[4,4,4,4,7]};
+function ptext(g,str,x,y,s,col){
+  g.fillStyle=col;
+  [...str].forEach((ch,i)=>{ const rows=PFONT[ch]; if(!rows)return;
+    rows.forEach((r,ry)=>{ for(let b=0;b<3;b++) if(r&(4>>b)) g.fillRect(x+i*(4*s)+b*s, y+ry*s, s, s); });
+  });
+}
+
+const TEX=[];               // index → Uint32Array(64*64)
+const T_TECH=0, T_RACK=1, T_PANEL=2, T_BRICK=3, T_HAZARD=4, T_HELL=5, T_BONE=6,
+      T_DOOR=7, T_EXIT=8, T_SEC_TECH=9, T_SEC_BRICK=10, T_SEC_HELL=11,
+      T_BANNER=12, T_BANNER_HELL=13;
+
+/* 0: TECH — tmavě zelený panel s obvody (serverovna) */
+TEX[T_TECH]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#0b2f26'); noise(g,'#0d3a2e','#092a21',3);
+  px(g,0,0,TS,2,'#155047'); px(g,0,62,TS,2,'#04140f'); px(g,0,0,2,TS,'#155047'); px(g,62,0,2,TS,'#04140f');
+  for(let i=0;i<5;i++){ const y=10+i*10;
+    px(g,6,y,34,1,'#1f9c5e'); px(g,40,y,1,7,'#1f9c5e'); px(g,40,y+7,14,1,'#1f9c5e');
+    px(g,54,y+6,3,3,'#39ff8c'); px(g,5,y-1,2,3,'#39ff8c'); }
+  px(g,8,54,10,6,'#06201d'); px(g,9,55,3,2,'#39ff8c'); px(g,14,57,2,2,'#ffcf2e');
+  px(g,46,52,12,8,'#06201d'); px(g,48,54,8,1,'#1f9c5e'); px(g,48,57,6,1,'#1f9c5e');
+});
+/* 1: RACK — serverové skříně s LED */
+TEX[T_RACK]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#081a16'); px(g,0,0,2,TS,'#123c31'); px(g,62,0,2,TS,'#020b08');
+  for(let r=0;r<8;r++){ const y=r*8;
+    px(g,4,y+1,56,6,r%2?'#0c2d24':'#0a261e'); px(g,4,y+1,56,1,'#155047'); px(g,4,y+6,56,1,'#04140f');
+    for(let l=0;l<6;l++){ const on=((r*7+l*3)%5)!=0;
+      px(g,8+l*5,y+3,2,2, on?(l%3==0?'#39ff8c':(l%3==1?'#ffcf2e':'#ff5d5d')):'#0f1f1a'); }
+    px(g,44,y+2,14,4,'#061511'); px(g,45,y+3,12,1,'#1f9c5e'); }
+});
+/* 2: PANEL — kovové pláty se šrouby */
+TEX[T_PANEL]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#10241f'); noise(g,'#132a24','#0c1f1a',4);
+  px(g,0,0,TS,3,'#1b3c33'); px(g,0,61,TS,3,'#061410'); px(g,31,0,2,TS,'#061410');
+  [[4,4],[26,4],[36,4],[58,4],[4,58],[26,58],[36,58],[58,58],[4,31],[58,31]].forEach(([x,y])=>{
+    px(g,x-1,y-1,3,3,'#1f9c5e'); px(g,x,y,1,1,'#0a1a15'); });
+  px(g,8,26,16,12,'#0a1d18'); px(g,9,27,14,2,'#39ff8c'); px(g,9,31,10,1,'#1f9c5e'); px(g,9,34,12,1,'#1f9c5e');
+  px(g,40,24,16,16,'#0a1d18'); px(g,42,26,12,12,'#123c31'); px(g,45,29,6,6,'#ffcf2e');
+});
+/* 3: BRICK — tmavé cihly s chevronem (výrobní hala) */
+TEX[T_BRICK]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#0d1f14');
+  for(let r=0;r<8;r++){ const y=r*8, off=(r%2)*16;
+    for(let b=0;b<3;b++){ const x=((b*32+off)%96)-16;
+      px(g,x+1,y+1,30,6,'#14301f'); px(g,x+1,y+1,30,1,'#1d4a2e'); px(g,x+1,y+6,30,1,'#08160e'); } }
+  noise(g,'#122a1c','#0a1a10',2);
+  /* zelený výstražný chevron pruh */
+  px(g,0,28,TS,8,'#0a1a10');
+  for(let i=-1;i<9;i++){ g.fillStyle=(i%2)?'#1f9c5e':'#ffcf2e';
+    g.beginPath(); g.moveTo(i*8,36); g.lineTo(i*8+4,28); g.lineTo(i*8+8,28); g.lineTo(i*8+4,36); g.fill(); }
+});
+/* 4: HAZARD — pruhy a mříže (hala/peklo přechod) */
+TEX[T_HAZARD]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#141008'); noise(g,'#1a150a','#0e0b05',3);
+  for(let i=-2;i<10;i++){ g.fillStyle=(i%2)?'#c9a223':'#171207';
+    g.beginPath(); g.moveTo(i*8,0); g.lineTo(i*8+8,0); g.lineTo(i*8-8,TS); g.lineTo(i*8-16,TS); g.fill(); }
+  px(g,0,0,TS,4,'#241c0c'); px(g,0,60,TS,4,'#0a0804');
+  for(let y=8;y<60;y+=12) px(g,0,y,TS,2,'rgba(0,0,0,.45)');
+});
+/* 5: HELL — datové peklo: rudá skála, zelené trhliny kódu */
+TEX[T_HELL]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#2a0d0a'); noise(g,'#3a120c','#1c0806',6);
+  for(let i=0;i<4;i++){ let x=8+i*15, y=0; g.fillStyle=i%2?'#39ff8c':'#1f9c5e';
+    while(y<TS){ const dx=((x*13+y*7)%3)-1; x+=dx; g.fillRect(x,y,1,3); y+=3; } }
+  [[10,12],[40,20],[22,44],[50,50]].forEach(([x,y])=>{ px(g,x,y,6,5,'#160504'); px(g,x+1,y+1,4,3,'#0c0202');
+    px(g,x+1,y+2,1,1,'#ff5d5d'); px(g,x+3,y+2,1,1,'#ff5d5d'); });
+});
+/* 6: BONE — hřbitov vyřazených disket zalitých v rudé skále (peklo alt) */
+TEX[T_BONE]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#200a07'); noise(g,'#2e0f0a','#150504',6);
+  for(let r=0;r<7;r++)for(let b=0;b<7;b++){
+    const x=b*9+(r%2)*4-3, y=r*9+1, rot=((r*5+b*3)%4);
+    if(((r*13+b*7)%5)===0) continue;                      // díry — skála prosvítá
+    px(g,x+1,y+1,7,6,'#1d2023'); px(g,x+1,y+1,7,1,'#2c3136');
+    px(g,x+2+rot%2,y+3,4,2,'#565b60'); px(g,x+3,y+2,2,1,'#0d0f11');
+  }
+  for(let i=0;i<3;i++){ let x=6+i*22, y=0; g.fillStyle='#39ff8c';
+    while(y<TS){ x+=((x*11+y*7)%3)-1; g.fillRect(x,y,1,2); y+=4; } }
+  [[8,20],[36,44],[50,14]].forEach(([x,y])=>{ px(g,x,y,5,4,'#0c0202'); px(g,x+1,y+1,1,1,'#ff5d5d'); px(g,x+3,y+1,1,1,'#ff5d5d'); });
+});
+/* 7: DOOR — posuvné dveře se zeleným pruhem */
+TEX[T_DOOR]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#0e2620'); px(g,0,0,4,TS,'#1b4a3d'); px(g,60,0,4,TS,'#04120d');
+  px(g,0,0,TS,4,'#1b4a3d'); px(g,0,60,TS,4,'#04120d');
+  px(g,30,4,4,56,'#061511');
+  px(g,6,28,52,8,'#0a1d18'); px(g,8,30,48,4,'#1f9c5e'); px(g,8,30,20,4,'#39ff8c');
+  [[10,10],[50,10],[10,50],[50,50]].forEach(([x,y])=>px(g,x,y,4,4,'#155047'));
+  px(g,38,12,16,8,'#061511'); px(g,40,14,12,4,'#ffcf2e');
+});
+/* 8: EXIT — zlatý východ */
+TEX[T_EXIT]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#141008');
+  px(g,0,0,TS,6,'#c9a223'); px(g,0,58,TS,6,'#c9a223'); px(g,0,0,6,TS,'#c9a223'); px(g,58,0,6,TS,'#c9a223');
+  px(g,6,6,52,52,'#0a1d18'); noise(g,'#0c241d','#081711',3);
+  px(g,10,24,44,18,'#04140f');
+  ptext(g,'EXIT',13,28,2.4,'#39ff8c'); ptext(g,'EXIT',12,27,2.4,'#ffcf2e');
+  px(g,26,46,12,8,'#061511'); px(g,28,48,8,4,'#39ff8c');
+});
+/* tajné zdi: kopie základu + nenápadná prasklina */
+function crackTex(base){
+  return makeTex(g=>{
+    const c=document.createElement('canvas'); c.width=TS; c.height=TS;
+    const ig=c.getContext('2d'), id=ig.createImageData(TS,TS);
+    new Uint32Array(id.data.buffer).set(TEX[base]); ig.putImageData(id,0,0);
+    g.drawImage(c,0,0);
+    let x=30; for(let y=6;y<58;y+=2){ x+=((y*13)%3)-1; px(g,x,y,1,2,'rgba(57,255,140,.5)'); }
+    px(g,29,30,4,2,'rgba(57,255,140,.55)');
+  });
+}
+TEX[T_SEC_TECH]=crackTex(T_TECH);
+TEX[T_SEC_BRICK]=crackTex(T_BRICK);
+TEX[T_SEC_HELL]=crackTex(T_HELL);
+
+/* pixel-art hlava ŠkoPilota pro bannery (procedurálně — funguje i z file://) */
+function skoHead(g,cx,cy,angry){
+  const skin='#e9f4ef', shade='#cfe0d8', dark='#0b1220';
+  px(g,cx-17,cy-6,4,11,'#1f9c5e'); px(g,cx+13,cy-6,4,11,'#1f9c5e');       // sluchátka
+  px(g,cx-18,cy-3,2,5,'#155047');  px(g,cx+16,cy-3,2,5,'#155047');
+  px(g,cx-13,cy-9,26,19,skin);                                            // hlava
+  px(g,cx-11,cy-11,22,2,skin); px(g,cx-11,cy+10,22,2,shade);
+  px(g,cx-13,cy+8,26,2,shade);
+  px(g,cx-7,cy-11,12,3,shade); px(g,cx-2,cy-9,6,2,shade);                 // culík
+  if(angry){
+    px(g,cx-9,cy-7,4,2,dark); px(g,cx-6,cy-5,3,2,dark);                   // svraštělé obočí
+    px(g,cx+5,cy-7,4,2,dark); px(g,cx+3,cy-5,3,2,dark);
+    px(g,cx-8,cy-2,5,5,'#ff3b30'); px(g,cx+3,cy-2,5,5,'#ff3b30');         // rudé oči
+    px(g,cx-7,cy-1,1,1,'#ffd7c9'); px(g,cx+4,cy-1,1,1,'#ffd7c9');
+    px(g,cx-3,cy+6,6,1,dark); px(g,cx-4,cy+7,1,1,dark); px(g,cx+3,cy+7,1,1,dark);  // zamračení
+  }else{
+    px(g,cx-8,cy-6,5,1,'#39ff8c'); px(g,cx+3,cy-6,5,1,'#39ff8c');         // obočí
+    px(g,cx-8,cy-3,5,6,dark); px(g,cx+3,cy-3,5,6,dark);                   // oči
+    px(g,cx-7,cy-2,2,2,'#fff'); px(g,cx+4,cy-2,2,2,'#fff');
+    px(g,cx-3,cy+5,6,1,'#39ff8c'); px(g,cx-4,cy+4,1,1,'#39ff8c'); px(g,cx+3,cy+4,1,1,'#39ff8c');  // úsměv
+  }
+}
+/* 12: BANNER — závěsný prapor s hlavou ŠkoPilota a nápisem SKODA */
+TEX[T_BANNER]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#10241f'); noise(g,'#132a24','#0c1f1a',4);
+  px(g,0,0,TS,3,'#1b3c33'); px(g,0,61,TS,3,'#061410');
+  px(g,10,2,44,3,'#c9a223');                                              // tyč
+  px(g,12,5,40,50,'#0a2d1f');                                             // látka
+  px(g,12,5,2,50,'#1f9c5e'); px(g,50,5,2,50,'#1f9c5e');
+  px(g,14,7,36,1,'#155047'); px(g,14,50,36,2,'#c9a223');
+  for(let i=0;i<5;i++){ g.fillStyle='#10241f'; g.beginPath();             // vlajkové zuby dole
+    g.moveTo(12+i*8,55); g.lineTo(16+i*8,62); g.lineTo(20+i*8,55); g.fill(); }
+  skoHead(g,32,24,false);
+  ptext(g,'SKODA',17,41,1.4,'#04140f'); ptext(g,'SKODA',16,40,1.4,'#39ff8c');
+});
+/* 13: BANNER PEKLO — potrhaný rudý prapor, ŠkoPilot se zlýma očima */
+TEX[T_BANNER_HELL]=makeTex(g=>{
+  px(g,0,0,TS,TS,'#2a0d0a'); noise(g,'#3a120c','#1c0806',6);
+  px(g,10,2,44,3,'#4a1512');
+  px(g,12,5,40,52,'#3d0f0b');
+  px(g,12,5,2,52,'#9c2f1f'); px(g,50,5,2,52,'#9c2f1f');
+  for(let i=0;i<6;i++){ g.fillStyle='#2a0d0a'; g.beginPath();             // potrhaný okraj
+    g.moveTo(12+i*7,57-(i%3)*4); g.lineTo(15+i*7,63); g.lineTo(19+i*7,55-((i+1)%2)*5); g.fill(); }
+  skoHead(g,32,26,true);
+  px(g,14,46,36,1,'#9c2f1f'); px(g,18,49,28,1,'#6e1f14');
+  for(let y=8;y<56;y+=13) px(g,13,y+((y*7)%4),38,1,'rgba(0,0,0,.35)');    // glitch pruhy
+});
+/* ===================== LEVELY ===================== */
+/* Legenda: #=zeď A  %=zeď B  &=zeď C  D=dveře  S=tajná zeď (push wall)
+   X=exit  .=podlaha  P=start  b/e/p/m=nepřátelé  c=káva f=disketa a=firewall $=auto */
+const LEVELS=[
+{ name:'E1M1: SERVEROVNA', par:75,
+  walls:{ '#':T_TECH, '%':T_RACK, '&':T_PANEL, '@':T_BANNER }, secretTex:T_SEC_TECH,
+  ceil:[10,26,22], floor:[16,42,33], fog:9,
+  startA:0,
+  map:[
+  '###@##%%%%%%#######@####',
+  '#..........#....#......#',
+  '#.P......b.D..c.#.b..f.#',
+  '#..........#....#......#',
+  '##@#..######&&.&&...b..#',
+  '%%%#..#f........#......#',
+  '%..#..#..b......#..#####',
+  '%..D..#....##..##..#%%%%',
+  '%..#..#....#....#..D...%',
+  '%%%#..######..e.#..#.e.%',
+  '#..#..S.....#...#..#...%',
+  '#..#..#..c..#...#..#%%.%',
+  '#..####..a..#.e.#..#....',
+  '#...b..$....#...#..#.b.X',
+  '#..#..#.....#..##..#....',
+  '#..#..#######..#...#%%.%',
+  '#..#..#....#..e#...#...%',
+  '#..D..#.c..D....#..D.f.%',
+  '#..#..#....#....#..#...%',
+  '#..#..##@#######...#%%%%',
+  '#..#....b......#...#....',
+  '#..##.......e..D...#....',
+  '#.f......#.....#...#....',
+  '################........'] },
+
+{ name:'E1M2: VYROBNI HALA', par:110,
+  walls:{ '#':T_BRICK, '%':T_HAZARD, '&':T_PANEL, '@':T_BANNER }, secretTex:T_SEC_BRICK,
+  ceil:[14,20,12], floor:[22,30,18], fog:8.5,
+  startA:Math.PI/2,
+  map:[
+  '####@############@######',
+  '#......%.....b.%.......#',
+  '#.c..b.%..e....D....p..#',
+  '#......D.......%.......#',
+  '#..#####.......%%%%D%%%#',
+  '#..#...#..&@&..#.......#',
+  '#..D.f.#.&...&.#..b.e..#',
+  '#..#...#.&.p.&.#.......#',
+  '#..##D##.&...&.#..###S##',
+  '#..#...#..&D&..#..#....#',
+  '#..#.e.#.......#..#.c$.#',
+  '#..#...#..b....#..#.a..#',
+  '#..#####.......#..######',
+  '#............e.#.......#',
+  '#.%%%%%..#####.D...p...#',
+  '#.%...D..#...#.#.......#',
+  '#.%.b.%..#.f.#.#####...#',
+  '#.%...%..#...#.....#.b.#',
+  '#.%%%%%..##D##..c..#...#',
+  '#..............#...#..X#',
+  '#.P..#..e...p..#.e.#...#',
+  '#....#.........#...##D##',
+  '#.f..#....b........#...#',
+  '##########@#############'] },
+
+{ name:'E1M3: DATOVE PEKLO', par:150,
+  walls:{ '#':T_HELL, '%':T_BONE, '&':T_HAZARD, '!':T_BANNER_HELL }, secretTex:T_SEC_HELL,
+  ceil:[26,8,8], floor:[30,12,10], fog:8, hell:true,
+  startA:-Math.PI/2,
+  map:[
+  '###########!!###########',
+  '#..f................f..#',
+  '#..b......%%%%......b..#',
+  '#.........%..%.........#',
+  '#..%%%%...%..%...%%%%..#',
+  '#..%......D..D......%..#',
+  '#..%.p....%..%....p.%..#',
+  '#..%......%..%......%..#',
+  '#..%%%%D%%%..%%%D%%%%..#',
+  '#......#........#......#',
+  '#..c...#...mm...#...c..#',
+  '#.P....D........D......#',
+  '#......#...mm...#....a.#',
+  '#..f...#........#......#',
+  '#..%%!%%%%D%%%%%%%%%...#',
+  '#..S...............%..X#',
+  '#..%.$.a.c.f.......%...#',
+  '#..%%%%%%%%%%%%%%%%%%D%#',
+  '#...b....e....e....b...#',
+  '#......................#',
+  '#..e...&&&..&&&....e...#',
+  '#......&.....&.........#',
+  '#..b...&..p..&....b....#',
+  '###########!!###########'] },
+];
+
+/* ===================== HERNÍ STAV ===================== */
+let state='title';         // title|story|play|inter|over|victory|enter|scores
+let level=0, tick=0, shake=0, flashRed=0, flashGold=0, toastMsg='', toastT=0;
+const AMMO_MAX=200;
+const pl={x:2,y:2,a:0,hp:100,armor:0,ammo:50,score:0,cool:0,hurtT:0,bob:0,dead:false,fireAnim:0};
+let MAP=[], MW=0, MH=0, doors={}, things=[], mobs=[], shots=[], parts=[], corpses=[];
+let stats={kills:0,killsT:0,items:0,itemsT:0,secrets:0,secretsT:0,t0:0,time:0};
+let levelDone=false, interT=0, showMap=true, storyT=0, overT=0;
+
+function toast(m){ toastMsg=m; toastT=130; }
+
+function cellAt(x,y){ return (x<0||y<0||x>=MW||y>=MH)?'#':MAP[y][x]; }
+function isWallChar(c){ return c!=='.' ; }
+function doorAt(x,y){ return doors[x+','+y]; }
+/* pevné pro pohyb (kruhová kolize řeší move()) */
+function solid(x,y){
+  const c=cellAt(x,y);
+  if(c==='.') return false;
+  const d=doorAt(x,y);
+  if(d) return d.open<0.85;
+  return true;
+}
+/* průhledné pro střely a LOS */
+function blocksShot(x,y){
+  const c=cellAt(x,y);
+  if(c==='.') return false;
+  const d=doorAt(x,y);
+  if(d) return d.open<0.5;
+  return true;
+}
+
+const ITYPES={
+  c:{spr:'coffee', scale:0.34, msg:'KAVA +25 HP',    snd:'pickup'},
+  f:{spr:'floppy', scale:0.34, msg:'DATA +12 NABOJU',snd:'pickup'},
+  a:{spr:'shield', scale:0.36, msg:'FIREWALL +25',   snd:'pickup'},
+  $:{spr:'car',    scale:0.44, msg:'SLUZEBNI VUZ! +500', snd:'secret'},
+};
+const MTYPES={
+  b:{spr:'bug',    hp:55,  sp:2.4, dmg:[6,14],  range:1.0, rate:52, score:100, scale:0.42, melee:true,  pain:0.6, snd:'bug'},
+  e:{spr:'email',  hp:65,  sp:1.6, dmg:[5,12],  range:7.5, rate:95, score:150, scale:0.46, float:0.30, pain:0.5, snd:'mail', proj:'spam'},
+  p:{spr:'paper',  hp:120, sp:1.3, dmg:[8,18],  range:7.0, rate:120,score:250, scale:0.62, pain:0.35, snd:'paper', proj:'paper'},
+  m:{spr:'machine',hp:520, sp:0.9, dmg:[10,22], range:9.0, rate:75, score:1200,scale:0.85, pain:0.12, snd:'boss', proj:'bolt', boss:true},
+};
+
+function loadLevel(n){
+  level=n; const L=LEVELS[n];
+  MAP=L.map.map(r=>r.split('')); MH=MAP.length; MW=MAP[0].length;
+  doors={}; things=[]; mobs=[]; shots=[]; parts=[]; corpses=[];
+  stats={kills:0,killsT:0,items:0,itemsT:0,secrets:0,secretsT:0,t0:performance.now(),time:0};
+  god=false; levelDone=false;
+  pl.hp=Math.max(pl.hp,100); pl.cool=0; pl.hurtT=0; pl.dead=false; pl.fireAnim=0;
+  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
+    const c=MAP[y][x];
+    if(c==='P'){ pl.x=x+0.5; pl.y=y+0.5; pl.a=L.startA; MAP[y][x]='.'; }
+    else if(c==='D'){ doors[x+','+y]={open:0,st:0,timer:0,secret:false,
+      axis:(cellAt(x-1,y)!=='.'&&cellAt(x+1,y)!=='.')?0:1}; }
+    else if(c==='S'){ doors[x+','+y]={open:0,st:0,timer:0,secret:true,
+      axis:(cellAt(x-1,y)!=='.'&&cellAt(x+1,y)!=='.')?0:1}; stats.secretsT++; }
+    else if(ITYPES[c]){ things.push({x:x+0.5,y:y+0.5,t:c,got:false}); stats.itemsT++; MAP[y][x]='.'; }
+    else if(MTYPES[c]){ const T=MTYPES[c];
+      mobs.push({x:x+0.5,y:y+0.5,t:c,hp:T.hp,cool:30+((x*7+y*13)%60),alert:false,painT:0,dir:0,dirT:0});
+      stats.killsT++; MAP[y][x]='.'; }
+  }
+}
+
+function texFor(c,x,y){
+  const L=LEVELS[level];
+  if(c==='D') return T_DOOR;
+  if(c==='S') return L.secretTex;
+  if(c==='X') return T_EXIT;
+  return L.walls[c]!==undefined ? L.walls[c] : T_TECH;
+}
+/* ===================== MINI SPRITY (projektily, částice) ===================== */
+function miniSpr(w,h,fn){ const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const g=c.getContext('2d'); fn(g); return c; }
+const PSPR={
+  spam: miniSpr(7,5,g=>{ px(g,0,0,7,5,'#e8e8e8'); px(g,0,0,7,1,'#aaa');
+    g.strokeStyle='#c0392b'; g.beginPath(); g.moveTo(0.5,0.5); g.lineTo(3.5,3.5); g.lineTo(6.5,0.5); g.stroke(); }),
+  paper: miniSpr(6,6,g=>{ px(g,1,0,4,6,'#e8e2d0'); px(g,0,1,6,4,'#e8e2d0'); px(g,2,1,2,1,'#8a8474'); px(g,1,3,4,1,'#8a8474'); }),
+  bolt: miniSpr(8,4,g=>{ px(g,0,1,8,2,'#39ff8c'); px(g,2,0,4,4,'#c9ffe2'); px(g,3,1,2,2,'#ffffff'); }),
+  puff: miniSpr(8,8,g=>{ px(g,2,2,4,4,'#c9ffe2'); px(g,0,3,8,2,'#39ff8c'); px(g,3,0,2,8,'#39ff8c'); }),
+  boom: miniSpr(10,10,g=>{ px(g,3,3,4,4,'#fff'); px(g,1,4,8,2,'#ffcf2e'); px(g,4,1,2,8,'#ffcf2e');
+    px(g,0,0,2,2,'#ff5d5d'); px(g,8,0,2,2,'#ff5d5d'); px(g,0,8,2,2,'#ff5d5d'); px(g,8,8,2,2,'#ff5d5d'); }),
+};
+const PROJ={
+  spam:{spr:'spam', sp:5.2, scale:0.16},
+  paper:{spr:'paper', sp:4.6, scale:0.20},
+  bolt:{spr:'bolt', sp:7.0, scale:0.18},
+};
+
+/* ===================== RAYCASTER ===================== */
+const FOV=0.66, MAXDEPTH=24;
+const READABLE=new Set([T_BANNER,T_BANNER_HELL,T_EXIT]);
+let rowCeil=new Uint32Array(RH), rowFloor=new Uint32Array(RH);
+function bakeRows(){
+  const L=LEVELS[level], half=RH>>1;
+  for(let y=0;y<half;y++){                       // strop: u horizontu tmavší
+    const t=y/half, k=0.25+0.75*(1-t);
+    rowCeil[y]=0xff000000|((L.ceil[2]*k)<<16)|((L.ceil[1]*k)<<8)|(L.ceil[0]*k);
+  }
+  for(let y=half;y<RH;y++){
+    const t=(y-half)/half, k=0.22+0.78*t;
+    rowFloor[y]=0xff000000|((L.floor[2]*k)<<16)|((L.floor[1]*k)<<8)|(L.floor[0]*k);
+  }
+}
+
+function castView(){
+  const L=LEVELS[level], fogD=L.fog;
+  const dirX=Math.cos(pl.a), dirY=Math.sin(pl.a);
+  const plX=-dirY*FOV, plY=dirX*FOV;
+  const half=RH>>1;
+  /* pozadí */
+  for(let y=0;y<half;y++){ const c=rowCeil[y]; const o=y*RW; for(let x=0;x<RW;x++) fb[o+x]=c; }
+  for(let y=half;y<RH;y++){ const c=rowFloor[y]; const o=y*RW; for(let x=0;x<RW;x++) fb[o+x]=c; }
+
+  for(let x=0;x<RW;x++){
+    const cam=2*x/RW-1;
+    const rdx=dirX+plX*cam, rdy=dirY+plY*cam;
+    let mx=pl.x|0, my=pl.y|0;
+    const ddx=Math.abs(1/(rdx||1e-9)), ddy=Math.abs(1/(rdy||1e-9));
+    let stX,stY,sdx,sdy;
+    if(rdx<0){ stX=-1; sdx=(pl.x-mx)*ddx; } else { stX=1; sdx=(mx+1-pl.x)*ddx; }
+    if(rdy<0){ stY=-1; sdy=(pl.y-my)*ddy; } else { stY=1; sdy=(my+1-pl.y)*ddy; }
+    let side=0, hit=0, dist=0, wallX=0, ti=0, depth=0;
+    while(!hit && depth++<MAXDEPTH*2){
+      if(sdx<sdy){ sdx+=ddx; mx+=stX; side=0; } else { sdy+=ddy; my+=stY; side=1; }
+      const c=cellAt(mx,my);
+      if(c==='.') continue;
+      const d=doorAt(mx,my);
+      if(d){
+        /* posuvné dveře: rovina uprostřed buňky */
+        if(side===0){
+          const t=(mx+0.5-pl.x)/rdx, yy=pl.y+t*rdy;
+          if(yy>=my && yy<my+1){ let wx=yy-my;
+            if(wx>=d.open){ dist=t; wallX=wx-d.open; ti=texFor(c); hit=1; side=0; continue; } }
+        } else {
+          const t=(my+0.5-pl.y)/rdy, xx=pl.x+t*rdx;
+          if(xx>=mx && xx<mx+1){ let wx=xx-mx;
+            if(wx>=d.open){ dist=t; wallX=wx-d.open; ti=texFor(c); hit=1; side=1; continue; } }
+        }
+        continue;   /* otevřeno / mimo rovinu → paprsek letí dál */
+      }
+      /* plná zeď */
+      if(side===0){ dist=(mx-pl.x+(1-stX)/2)/rdx; wallX=pl.y+dist*rdy-my; }
+      else        { dist=(my-pl.y+(1-stY)/2)/rdy; wallX=pl.x+dist*rdx-mx; }
+      ti=texFor(c); hit=1;
+    }
+    if(!hit){ zbuf[x]=1e9; continue; }
+    zbuf[x]=dist;
+    const lh=(RH/dist)|0;
+    let y0=((RH-lh)>>1), y1=y0+lh;
+    let texX=(wallX*TS)|0; if(texX<0)texX=0; if(texX>TS-1)texX=TS-1;
+    let flip=(side===0&&rdx>0)||(side===1&&rdy<0);
+    if(READABLE.has(ti)) flip=!flip;   /* textury s nápisem/tváří: nikdy zrcadlově */
+    if(flip) texX=TS-1-texX;
+    const tex=TEX[ti];
+    let sh=(side===1?0.70:1.0)*Math.max(0.10, 1-dist/fogD);
+    if(L.hell) sh*= (1+Math.sin(tick*0.05+x*0.02)*0.03);   // peklo lehce pulzuje
+    const step=TS/lh, texS=(y0<0?-y0:0)*step;
+    const ys=Math.max(0,y0), ye=Math.min(RH,y1);
+    let tp=texS;
+    for(let y=ys;y<ye;y++){
+      const ty=tp&63; tp+=step;
+      const u=tex[((ty|0)<<6)+texX];
+      const r=((u&255)*sh)|0, g=(((u>>8)&255)*sh)|0, b=(((u>>16)&255)*sh)|0;
+      fb[y*RW+x]=0xff000000|(b<<16)|(g<<8)|r;
+    }
+  }
+  bctx.putImageData(frame,0,0);
+}
+
+/* ===================== SPRITE RENDER ===================== */
+function fogFilter(dist){
+  const L=LEVELS[level];
+  const f=Math.max(15, Math.min(100, Math.round((1-dist/L.fog)*100/10)*10));
+  return f>=100 ? 'none' : 'brightness('+f+'%)';   // 'none' šetří výkon na Pi 4
+}
+function drawSprites(){
+  const dirX=Math.cos(pl.a), dirY=Math.sin(pl.a);
+  const plX=-dirY*FOV, plY=dirX*FOV;
+  const inv=1/(plX*dirY-dirX*plY);
+  const list=[];
+  for(const c of corpses) list.push({x:c.x,y:c.y,img:SPR[MTYPES[c.t].spr],scale:MTYPES[c.t].scale*0.55,squash:0.45,filter:'brightness(50%) saturate(55%)'});
+  for(const th of things) if(!th.got) list.push({x:th.x,y:th.y,img:SPR[ITYPES[th.t].spr],scale:ITYPES[th.t].scale,float:0.02+Math.sin(tick*0.08+th.x)*0.015});
+  for(const m of mobs){ const T=MTYPES[m.t];
+    list.push({x:m.x,y:m.y,img:SPR[T.spr],scale:T.scale,float:T.float?T.float+Math.sin(tick*0.1+m.x*3)*0.05:0,
+      filter:m.painT>0?'brightness(260%)':null}); }
+  for(const s of shots){ const P=PROJ[s.t];
+    list.push({x:s.x,y:s.y,cv:PSPR[P.spr],scale:P.scale,float:s.z}); }
+  for(const p of parts) if(p.spr) list.push({x:p.x,y:p.y,cv:PSPR[p.spr],scale:p.scale*(p.grow?1+ (1-p.ttl/p.ttl0)*1.6:1),float:p.z,filter:null});
+  for(const s of list){
+    const rx=s.x-pl.x, ry=s.y-pl.y;
+    const tx=inv*(dirY*rx-dirX*ry), ty=inv*(-plY*rx+plX*ry);
+    if(ty<=0.12) continue;
+    s.ty=ty; s.tx=tx;
+  }
+  list.sort((a,b)=>(b.ty||0)-(a.ty||0));
+  for(const s of list){
+    if(!s.ty) continue;
+    const im=s.cv||s.img;
+    if(!s.cv && (!im.complete||!im.naturalWidth)) continue;
+    const iw=s.cv?im.width:im.naturalWidth, ih=s.cv?im.height:im.naturalHeight;
+    const hpx=(RH/s.ty)*s.scale*(s.squash?s.squash:1);
+    const wpx=(RH/s.ty)*s.scale*(iw/ih);
+    const scrX=(RW/2)*(1+s.tx/s.ty);
+    const bottom=RH/2+RH/(2*s.ty)-(s.float||0)*(RH/s.ty);
+    const top=bottom-hpx;
+    let x0=Math.floor(scrX-wpx/2), x1=Math.ceil(scrX+wpx/2);
+    if(x1<0||x0>=RW||hpx<1) continue;
+    bctx.filter=s.filter||fogFilter(s.ty);
+    let run=-1;
+    for(let x=Math.max(0,x0); x<=Math.min(RW-1,x1); x++){
+      const vis=s.ty<zbuf[x];
+      if(vis && run<0) run=x;
+      if((!vis||x===Math.min(RW-1,x1)) && run>=0){
+        const end=vis?x+1:x;
+        const sx=(run-x0)/wpx*iw, sw=(end-run)/wpx*iw;
+        if(sw>0.01) bctx.drawImage(im,sx,0,sw,ih,run,top,end-run,hpx);
+        run=-1;
+      }
+    }
+    bctx.filter='none';
+  }
+  /* částice (tečky) */
+  for(const p of parts){
+    if(p.spr) continue;
+    const rx=p.x-pl.x, ry=p.y-pl.y;
+    const tx=inv*(dirY*rx-dirX*ry), ty=inv*(-plY*rx+plX*ry);
+    if(ty<=0.12) continue;
+    const scrX=((RW/2)*(1+tx/ty))|0;
+    if(scrX<0||scrX>=RW||ty>=zbuf[scrX]) continue;
+    const yy=(RH/2+RH/(2*ty)-p.z*(RH/ty))|0;
+    const sz=Math.max(1,(RH/ty*0.03)|0);
+    bctx.fillStyle=p.col; bctx.fillRect(scrX,yy,sz,sz);
+  }
+}
+
+/* ===================== ZBRAŇ (DATOMET — služební blaster) ===================== */
+function drawWeapon(){
+  const bobX=Math.sin(pl.bob)*5, bobY=Math.abs(Math.cos(pl.bob))*4;
+  const rec=pl.fireAnim>0?Math.sin(pl.fireAnim/8*Math.PI)*9:0;
+  const cx=RW/2+8+bobX, cy=RH-38+bobY+rec;
+  const g=bctx;
+  /* záblesk z hlavně */
+  if(pl.fireAnim>5){
+    g.fillStyle='#ffffff'; g.fillRect(cx-3,cy-16,8,8);
+    g.fillStyle='#ffcf2e'; g.fillRect(cx-7,cy-13,16,3); g.fillRect(cx-1,cy-21,4,14);
+    g.fillStyle='#39ff8c'; g.fillRect(cx-10,cy-12,3,2); g.fillRect(cx+9,cy-12,3,2);
+  }
+  /* hlaveň — světlý kov, ať se neztrácí na tmavých stěnách */
+  g.fillStyle='#03110c'; g.fillRect(cx-9,cy-12,22,30);                // obrys
+  g.fillStyle='#2a7a5e'; g.fillRect(cx-7,cy-10,18,28);
+  g.fillStyle='#57d6a4'; g.fillRect(cx-7,cy-10,5,28);                 // odlesk
+  g.fillStyle='#155e46'; g.fillRect(cx+7,cy-10,4,28);
+  g.fillStyle='#0a1d18'; g.fillRect(cx-4,cy-9,12,4);                  // ústí
+  g.fillStyle='#39ff8c'; g.fillRect(cx-7,cy-2,18,2);                  // prstenec
+  g.fillStyle='#39ff8c'; g.fillRect(cx-7,cy+8,18,2);
+  /* tělo blasteru */
+  g.fillStyle='#03110c'; g.fillRect(cx-18,cy+14,44,26);
+  g.fillStyle='#1c5b45'; g.fillRect(cx-16,cy+16,40,22);
+  g.fillStyle='#2a7a5e'; g.fillRect(cx-16,cy+16,40,4);
+  g.fillStyle='#ffcf2e'; g.fillRect(cx+16,cy+24,8,5);
+  g.fillStyle='#061511'; g.fillRect(cx-11,cy+23,18,10);
+  g.fillStyle='#39ff8c'; g.fillRect(cx-9,cy+26,4+((tick>>4)%3)*4,3);  // blikající displej
+  /* bílo-zelená robo ruka ŠkoPilota */
+  g.fillStyle='#e9f4ef'; g.fillRect(cx+22,cy+26,22,16);
+  g.fillStyle='#cfe0d8'; g.fillRect(cx+22,cy+38,22,4);
+  g.fillStyle='#2ec27e'; g.fillRect(cx+36,cy+20,16,24);
+  g.fillStyle='#1b7a52'; g.fillRect(cx+47,cy+20,5,24);
+  g.fillStyle='#0f3d2b'; g.fillRect(cx+36,cy+20,16,4);
+}
+/* ===================== HUD ===================== */
+function hudNumColor(v){ return v>50?'#39ff8c':(v>25?'#ffcf2e':'#ff5d5d'); }
+function drawHUD(){
+  const g=ctx, y=VIEW_H;
+  g.fillStyle='#0a0f0d'; g.fillRect(0,y,W,HUD_H);
+  g.fillStyle='#1f9c5e'; g.fillRect(0,y,W,3);
+  g.fillStyle='#04140f'; g.fillRect(0,y+3,W,2);
+  g.fillStyle='#123c31';
+  [150,300,500,650].forEach(x=>g.fillRect(x,y+10,2,HUD_H-20));
+  g.textAlign='center'; g.textBaseline='middle';
+  /* NÁBOJE */
+  g.font='24px PixelArcade'; g.fillStyle=hudNumColor(Math.min(100,pl.ammo));
+  g.fillText(pl.ammo, 75, y+46);
+  g.font='8px PixelArcade'; g.fillStyle='#7e9a90'; g.fillText('NABOJE', 75, y+78);
+  /* HP */
+  g.font='24px PixelArcade'; g.fillStyle=god?'#ffcf2e':hudNumColor(pl.hp);
+  g.fillText(Math.max(0,pl.hp)+'%', 225, y+46);
+  g.font='8px PixelArcade'; g.fillStyle='#7e9a90'; g.fillText(god?'BUH':'ZDRAVI', 225, y+78);
+  /* TVÁŘ */
+  const hurt=Math.min(1,pl.hurtT/40 + Math.max(0,(35-pl.hp)/70));
+  drawFace(pl.dead?0:hurt, pl.dead);
+  const fx=400+(pl.dead?0:Math.sin(tick*0.021)*3|0), fy=y+50+(pl.hp<25&&!pl.dead?Math.sin(tick*0.7)*1.5:0);
+  g.fillStyle='#04140f'; g.fillRect(352,y+8,96,84);
+  g.strokeStyle='#155047'; g.lineWidth=2; g.strokeRect(352,y+8,96,84);
+  g.drawImage(faceCv, fx-48, fy-36);
+  /* ARMOR */
+  g.font='24px PixelArcade'; g.fillStyle=pl.armor>0?'#39ff8c':'#3c5a52';
+  g.fillText(pl.armor+'%', 575, y+46);
+  g.font='8px PixelArcade'; g.fillStyle='#7e9a90'; g.fillText('FIREWALL', 575, y+78);
+  /* SKÓRE + level */
+  g.font='16px PixelArcade'; g.fillStyle='#ffcf2e';
+  g.fillText(String(pl.score).padStart(6,'0'), 725, y+34);
+  g.font='7px PixelArcade'; g.fillStyle='#7e9a90';
+  g.fillText('SKORE', 725, y+52);
+  g.fillStyle='#1f9c5e';
+  g.fillText('E1M'+(level+1)+'  Z:'+stats.kills+'/'+stats.killsT, 725, y+72);
+  g.textAlign='left';
+}
+
+function drawMinimap(){
+  const cs=5, mw=MW*cs, mx=W-mw-12, my=12;
+  const g=ctx;
+  g.globalAlpha=0.78;
+  g.fillStyle='#020806'; g.fillRect(mx-3,my-3,mw+6,MH*cs+6);
+  for(let yy=0;yy<MH;yy++)for(let xx=0;xx<MW;xx++){
+    const c=MAP[yy][xx]; if(c==='.') continue;
+    const d=doorAt(xx,yy);
+    if(c==='X') g.fillStyle='#ffcf2e';
+    else if(d) g.fillStyle=d.open>0.8?'#0d3a2e':(d.secret?'#155047':'#c9a223');
+    else g.fillStyle='#155047';
+    g.fillRect(mx+xx*cs,my+yy*cs,cs-1,cs-1);
+  }
+  for(const m of mobs){ g.fillStyle=m.alert?'#ff5d5d':'#7a2a20';
+    g.fillRect(mx+m.x*cs-1,my+m.y*cs-1,3,3); }
+  for(const th of things) if(!th.got){ g.fillStyle='#39ff8c'; g.fillRect(mx+th.x*cs-1,my+th.y*cs-1,2,2); }
+  g.save(); g.translate(mx+pl.x*cs,my+pl.y*cs); g.rotate(pl.a);
+  g.fillStyle='#ffffff'; g.beginPath(); g.moveTo(5,0); g.lineTo(-3,-3); g.lineTo(-3,3); g.fill();
+  g.restore();
+  g.globalAlpha=1;
+}
+
+/* ===================== POHYB & KOLIZE ===================== */
+const PRAD=0.24;
+function tryMove(nx,ny){
+  if(!solid(Math.floor(nx+PRAD),Math.floor(pl.y)) && !solid(Math.floor(nx-PRAD),Math.floor(pl.y))
+     && !solid(Math.floor(nx+PRAD),Math.floor(pl.y+PRAD*0.8)) && !solid(Math.floor(nx-PRAD),Math.floor(pl.y-PRAD*0.8))) pl.x=nx;
+  if(!solid(Math.floor(pl.x),Math.floor(ny+PRAD)) && !solid(Math.floor(pl.x),Math.floor(ny-PRAD))
+     && !solid(Math.floor(pl.x+PRAD*0.8),Math.floor(ny+PRAD)) && !solid(Math.floor(pl.x-PRAD*0.8),Math.floor(ny-PRAD))) pl.y=ny;
+}
+function updatePlayer(dt){
+  if(pl.dead) return;
+  const turn=0.052*dt, sp=0.072*dt;
+  const strafeMode=action.strafe;
+  let mvF=0, mvS=0;
+  if(action.fwd) mvF+=1;
+  if(action.back) mvF-=1;
+  if(action.left){ if(strafeMode) mvS-=1; else pl.a-=turn; }
+  if(action.right){ if(strafeMode) mvS+=1; else pl.a+=turn; }
+  if(action.sleft) mvS-=1;
+  if(action.sright) mvS+=1;
+  if(mvF||mvS){
+    const len=Math.hypot(mvF,mvS); mvF/=len; mvS/=len;
+    const dx=Math.cos(pl.a)*mvF*sp - Math.sin(pl.a)*mvS*sp*0.9;
+    const dy=Math.sin(pl.a)*mvF*sp + Math.cos(pl.a)*mvS*sp*0.9;
+    tryMove(pl.x+dx,pl.y+dy);
+    pl.bob+=0.16*dt;
+  }
+  /* dveře: automatické otevírání v blízkosti (arkádově pohodlné) */
+  const px0=Math.floor(pl.x), py0=Math.floor(pl.y);
+  for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){
+    const d=doorAt(px0+ox,py0+oy);
+    if(d && !d.secret && d.st===0 && d.open<1){
+      const ddx=px0+ox+0.5-pl.x, ddy=py0+oy+0.5-pl.y;
+      if(ddx*ddx+ddy*ddy<2.6){ d.st=1; sfx('door'); }
+    }
+  }
+  /* tajné zdi: zatlač (fire/strafe tlačítko) na prasklou zeď před sebou */
+  if(consume('strafe')||justAction.fire){
+    const fx=Math.floor(pl.x+Math.cos(pl.a)*0.9), fy=Math.floor(pl.y+Math.sin(pl.a)*0.9);
+    const d=doorAt(fx,fy);
+    if(d && d.secret && d.st===0){ d.st=1; stats.secrets++; pl.score+=500; toast('NASEL JSI TAJNOU CHODBU!'); sfx('secret'); flashGold=20; }
+  }
+  /* exit */
+  const ex=Math.floor(pl.x+Math.cos(pl.a)*0.75), ey=Math.floor(pl.y+Math.sin(pl.a)*0.75);
+  if(cellAt(ex,ey)==='X' && !levelDone){
+    const dx=ex+0.5-pl.x, dy=ey+0.5-pl.y;
+    if(dx*dx+dy*dy<1.0){ levelDone=true; endLevel(); }
+  }
+  /* sběr věcí */
+  for(const th of things){
+    if(th.got) continue;
+    const dx=th.x-pl.x, dy=th.y-pl.y;
+    if(dx*dx+dy*dy<0.32){
+      const I=ITYPES[th.t];
+      if(th.t==='c'){ if(pl.hp>=100) continue; pl.hp=Math.min(100,pl.hp+25); }
+      if(th.t==='f'){ if(pl.ammo>=AMMO_MAX) continue; pl.ammo=Math.min(AMMO_MAX,pl.ammo+12); }
+      if(th.t==='a'){ if(pl.armor>=100) continue; pl.armor=Math.min(100,pl.armor+25); }
+      if(th.t==='$'){ pl.score+=500; }
+      th.got=true; stats.items++; pl.score+=25; toast(I.msg); sfx(I.snd); flashGold=Math.max(flashGold,12);
+    }
+  }
+  /* střelba — hitscan jako doomová pistole */
+  if(pl.cool>0) pl.cool-=dt;
+  if(action.fire && pl.cool<=0){
+    if(pl.ammo>0){
+      pl.ammo--; pl.cool=16; pl.fireAnim=10; shake=Math.max(shake,3); sfx('shoot');
+      fireHitscan();
+      for(const m of mobs){ const dx=m.x-pl.x,dy=m.y-pl.y; if(dx*dx+dy*dy<12*12) m.alert=true; }
+    } else if(consume('fire')){ pl.cool=14; sfx('empty'); toast('DOSLY NABOJE! SEBER DISKETY'); }
+  }
+  justAction.fire=false;
+}
+function fireHitscan(){
+  const dx=Math.cos(pl.a), dy=Math.sin(pl.a);
+  /* zeď v cestě */
+  let wallD=MAXDEPTH;
+  { let x=pl.x,y=pl.y;
+    for(let s=0;s<MAXDEPTH*3;s++){ x+=dx/3; y+=dy/3;
+      if(blocksShot(Math.floor(x),Math.floor(y))){ wallD=Math.hypot(x-pl.x,y-pl.y); break; } } }
+  /* nejbližší zasažený mob v úzkém kuželu */
+  let best=null, bestD=wallD;
+  for(const m of mobs){
+    const rx=m.x-pl.x, ry=m.y-pl.y;
+    const d=Math.hypot(rx,ry);
+    if(d>bestD) continue;
+    const ang=Math.atan2(ry,rx)-pl.a;
+    const norm=Math.atan2(Math.sin(ang),Math.cos(ang));
+    const hitW=Math.max(0.09, MTYPES[m.t].scale*0.4/Math.max(0.7,d));
+    if(Math.abs(norm)<hitW){ best=m; bestD=d; }
+  }
+  if(best){
+    const dmg=28+Math.random()*17|0;
+    hurtMob(best,dmg);
+    spawnPuff(best.x-dx*0.2,best.y-dy*0.2,0.42);
+  } else {
+    spawnPuff(pl.x+dx*(bestD-0.1),pl.y+dy*(bestD-0.1),0.5);
+  }
+}
+function spawnPuff(x,y,z){ parts.push({x,y,z,spr:'puff',scale:0.10,grow:true,ttl:9,ttl0:9}); }
+function hurtMob(m,dmg){
+  m.hp-=dmg; m.alert=true;
+  const T=MTYPES[m.t];
+  if(m.hp<=0){ killMob(m); return; }
+  if(Math.random()<T.pain){ m.painT=9; sfx(T.snd); }
+}
+function killMob(m){
+  const T=MTYPES[m.t];
+  pl.score+=T.score; stats.kills++;
+  corpses.push({x:m.x,y:m.y,t:m.t});
+  mobs.splice(mobs.indexOf(m),1);
+  parts.push({x:m.x,y:m.y,z:0.4,spr:'boom',scale:0.3,grow:true,ttl:12,ttl0:12});
+  for(let i=0;i<7;i++) parts.push({x:m.x,y:m.y,z:0.35,vx:(Math.random()-0.5)*0.09,vy:(Math.random()-0.5)*0.09,
+    vz:Math.random()*0.05, col:i%2?'#39ff8c':'#0d4631', ttl:26+Math.random()*14,ttl0:40});
+  sfx(T.boss?'bossdie':'die');
+  if(T.boss) toast('STROJ ZNICEN!');
+  if(stats.kills===stats.killsT){ pl.score+=1000; toast('VSICHNI NEPRATELE ZNICENI +1000'); }
+}
+function hurtPlayer(dmg,fromX,fromY){
+  if(god||pl.dead||levelDone) return;
+  if(pl.armor>0){ const ab=Math.min(pl.armor,Math.ceil(dmg/2)); pl.armor-=ab; dmg-=ab; }
+  pl.hp-=dmg; pl.hurtT=40; flashRed=Math.min(30,10+dmg); shake=Math.max(shake,4); sfx('hurt');
+  if(pl.hp<=0){ pl.hp=0; pl.dead=true; overT=0; sfx('playerdie'); }
+}
+/* ===================== AI NEPŘÁTEL ===================== */
+function los(x0,y0,x1,y1){
+  const dx=x1-x0, dy=y1-y0, d=Math.hypot(dx,dy);
+  if(d<0.001) return true;
+  const steps=Math.ceil(d*3);
+  for(let i=1;i<steps;i++){
+    const t=i/steps;
+    if(blocksShot(Math.floor(x0+dx*t),Math.floor(y0+dy*t))) return false;
+  }
+  return true;
+}
+function mobSolid(x,y){ return solid(Math.floor(x),Math.floor(y)); }
+function updateMobs(dt){
+  for(const m of mobs){
+    const T=MTYPES[m.t];
+    if(m.painT>0){ m.painT-=dt; continue; }
+    const dx=pl.x-m.x, dy=pl.y-m.y, dist=Math.hypot(dx,dy);
+    const seen=dist<11 && los(m.x,m.y,pl.x,pl.y);
+    if(seen && dist<9) m.alert=true;
+    if(!m.alert) continue;
+    /* pohyb k hráči (s náhradním směrem u zdi) */
+    const sp=T.sp*0.017*dt;
+    if(dist>(T.melee?0.85:2.2)){
+      let ang=Math.atan2(dy,dx)+m.dir;
+      let nx=m.x+Math.cos(ang)*sp, ny=m.y+Math.sin(ang)*sp;
+      let moved=false;
+      if(!mobSolid(nx,m.y)){ m.x=nx; moved=true; }
+      if(!mobSolid(m.x,ny)){ m.y=ny; moved=true; }
+      if(!moved){ m.dirT-=dt; if(m.dirT<=0){ m.dir=(Math.random()<0.5?1:-1)*(Math.PI/2)*(0.6+Math.random()*0.8); m.dirT=40+Math.random()*40; } }
+      else { m.dirT-=dt; if(m.dirT<=0){ m.dir*=0.4; m.dirT=30; } }
+      /* nepřátelé si otevírají obyčejné dveře */
+      const d=doorAt(Math.floor(m.x+Math.cos(ang)*0.7),Math.floor(m.y+Math.sin(ang)*0.7));
+      if(d && !d.secret && d.st===0){ d.st=1; sfx('door'); }
+    }
+    /* útok */
+    m.cool-=dt;
+    if(m.cool<=0 && !pl.dead){
+      if(T.melee){
+        if(dist<T.range+0.25 && los(m.x,m.y,pl.x,pl.y)){ hurtPlayer(T.dmg[0]+Math.random()*(T.dmg[1]-T.dmg[0])|0, m.x,m.y); m.cool=T.rate; sfx(T.snd); }
+        else m.cool=8;
+      } else if(seen && dist<T.range){
+        const a=Math.atan2(dy,dx)+(Math.random()-0.5)*0.09;
+        shots.push({x:m.x+Math.cos(a)*0.3,y:m.y+Math.sin(a)*0.3,z:0.42+(T.float||0),
+          vx:Math.cos(a)*PROJ[T.proj].sp*0.017, vy:Math.sin(a)*PROJ[T.proj].sp*0.017,
+          t:T.proj, dmg:T.dmg, enemy:true});
+        if(T.boss && Math.random()<0.5){  /* boss střílí dvojitě */
+          shots.push({x:m.x-Math.sin(a)*0.25,y:m.y+Math.cos(a)*0.25,z:0.42,
+            vx:Math.cos(a)*PROJ[T.proj].sp*0.017, vy:Math.sin(a)*PROJ[T.proj].sp*0.017,
+            t:T.proj, dmg:T.dmg, enemy:true});
+        }
+        m.cool=T.rate*(0.8+Math.random()*0.5); sfx(T.snd);
+      } else m.cool=10;
+    }
+  }
+}
+function updateShots(dt){
+  for(let i=shots.length-1;i>=0;i--){
+    const s=shots[i];
+    const steps=Math.ceil(dt);
+    let dead=false;
+    for(let k=0;k<steps && !dead;k++){
+      s.x+=s.vx; s.y+=s.vy;
+      if(blocksShot(Math.floor(s.x),Math.floor(s.y))){ spawnPuff(s.x-s.vx,s.y-s.vy,s.z); dead=true; break; }
+      if(s.enemy){
+        const dx=s.x-pl.x, dy=s.y-pl.y;
+        if(dx*dx+dy*dy<0.14){ hurtPlayer(s.dmg[0]+Math.random()*(s.dmg[1]-s.dmg[0])|0, s.x,s.y); dead=true; break; }
+      }
+    }
+    if(dead) shots.splice(i,1);
+  }
+}
+function updateDoors(dt){
+  for(const k in doors){
+    const d=doors[k];
+    if(d.st===1){ d.open+=0.028*dt;
+      if(d.open>=1){ d.open=1;
+        if(d.secret){ const [x,y]=k.split(',').map(Number); MAP[y][x]='.'; delete doors[k]; continue; }
+        d.st=2; d.timer=210; } }
+    else if(d.st===2){ d.timer-=dt;
+      if(d.timer<=0){ const [x,y]=k.split(',').map(Number);
+        const px0=Math.floor(pl.x), py0=Math.floor(pl.y);
+        if(px0===x&&py0===y){ d.timer=60; } else { d.st=3; sfx('door'); } } }
+    else if(d.st===3){ d.open-=0.028*dt;
+      const [x,y]=k.split(',').map(Number);
+      if(Math.floor(pl.x)===x&&Math.floor(pl.y)===y){ d.st=1; }
+      else if(d.open<=0){ d.open=0; d.st=0; } }
+  }
+}
+function updateParts(dt){
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i];
+    p.ttl-=dt;
+    if(p.ttl<=0){ parts.splice(i,1); continue; }
+    if(p.vx!==undefined){
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=(p.vz||0)*dt; p.vz=(p.vz||0)-0.004*dt;
+      if(p.z<0.02){ p.z=0.02; p.vz=0; p.vx*=0.8; p.vy*=0.8; }
+    }
+  }
+}
+/* ===================== AUDIO (WebAudio, vše procedurální) ===================== */
+let AC=null, masterGain=null, musicOn=true, musicTimer=null;
+function wakeAudio(){
+  if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)();
+    masterGain=AC.createGain(); masterGain.gain.value=0.16; masterGain.connect(AC.destination);
+    startMusic(); }catch(e){} }
+  if(AC && AC.state==='suspended') AC.resume();
+}
+function tone(f0,f1,dur,type,vol,when){
+  if(!AC) return;
+  const t=AC.currentTime+(when||0);
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.type=type||'square'; o.frequency.setValueAtTime(f0,t);
+  if(f1) o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);
+  g.gain.setValueAtTime(vol||0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t+dur+0.02);
+}
+function noiseBurst(dur,vol,fc,when){
+  if(!AC) return;
+  const t=AC.currentTime+(when||0);
+  const n=AC.sampleRate*dur, b=AC.createBuffer(1,n,AC.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+  const s=AC.createBufferSource(); s.buffer=b;
+  const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value=fc||900;
+  const g=AC.createGain(); g.gain.value=vol||0.5;
+  s.connect(f); f.connect(g); g.connect(masterGain); s.start(t);
+}
+function sfx(n){
+  if(!AC) return;
+  switch(n){
+    case 'shoot': noiseBurst(0.14,0.9,2400); tone(190,45,0.14,'square',0.7); break;
+    case 'empty': tone(220,180,0.05,'square',0.3); break;
+    case 'hurt': tone(140,60,0.22,'sawtooth',0.6); noiseBurst(0.1,0.4,500); break;
+    case 'die': noiseBurst(0.3,0.8,700); tone(300,40,0.35,'sawtooth',0.5); break;
+    case 'bossdie': noiseBurst(0.7,1,400); tone(200,25,0.8,'sawtooth',0.8); tone(150,20,0.9,'square',0.5,0.1); break;
+    case 'playerdie': tone(400,30,1.1,'sawtooth',0.7); noiseBurst(0.5,0.6,300,0.2); break;
+    case 'door': tone(90,190,0.28,'square',0.25); noiseBurst(0.2,0.2,300); break;
+    case 'pickup': tone(660,0,0.06,'square',0.4); tone(880,0,0.08,'square',0.4,0.06); break;
+    case 'secret': [523,659,784,1047].forEach((f,i)=>tone(f,0,0.11,'square',0.4,i*0.09)); break;
+    case 'bug': tone(900,400,0.08,'square',0.2); break;
+    case 'mail': tone(500,900,0.1,'triangle',0.3); break;
+    case 'paper': noiseBurst(0.12,0.3,1200); break;
+    case 'boss': tone(80,50,0.3,'sawtooth',0.5); break;
+    case 'exit': [392,494,587,784].forEach((f,i)=>tone(f,0,0.16,'square',0.5,i*0.13)); break;
+  }
+}
+/* originální doom-metal riff (žádný E1M1 — jen stejná nálada) */
+const RIFF=[0,0,12,0,0,7,0,10, 0,0,12,0,13,12,10,7];
+function startMusic(){
+  if(musicTimer) return;
+  let step=0;
+  const base=41.2;   /* E1 */
+  musicTimer=setInterval(()=>{
+    if(!AC||!musicOn||AC.state!=='running') return;
+    if(state!=='play'&&state!=='title') return;
+    const semi=RIFF[step%16];
+    const f=base*Math.pow(2,semi/12);
+    tone(f,f*0.99,0.16,'sawtooth',state==='play'?0.30:0.16);
+    tone(f*2,0,0.1,'square',state==='play'?0.10:0.05);
+    if(step%2===0) noiseBurst(0.03,0.1,6000);
+    if(step%8===4) noiseBurst(0.12,0.3,900);
+    step++;
+  }, 150);
+}
+
+/* ===================== SÍŇ SLÁVY ===================== */
+const HOF_KEY='sko_doom_hof', BEST_KEY='sko_doom_best', NAME_LEN=5;
+const NAME_CHARS=' ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789-/';
+function loadHof(){ try{ return JSON.parse(localStorage.getItem(HOF_KEY))||[]; }catch(e){ return []; } }
+function saveHof(h){ localStorage.setItem(HOF_KEY,JSON.stringify(h.slice(0,5))); }
+let entryName=[], entryPos=0, hofRank=-1, afterEntry='title';
+function qualifies(sc){ const h=loadHof(); return sc>0 && (h.length<5 || sc>h[h.length-1].s); }
+function beginEntry(next){
+  afterEntry=next; entryName=[...'     ']; entryPos=0; state='enter';
+}
+function commitEntry(){
+  const nm=entryName.join('').trim()||'SKODA';
+  const h=loadHof(); h.push({n:nm,s:pl.score}); h.sort((a,b)=>b.s-a.s); saveHof(h);
+  hofRank=h.findIndex(e=>e.s===pl.score&&e.n===nm);
+  state='scores'; scoresT=0;
+}
+function nameEntryKey(e){
+  if(/^[a-zA-Z0-9\/-]$/.test(e.key)){
+    e.preventDefault();
+    const ch=e.key.toUpperCase();
+    if(NAME_CHARS.includes(ch)){ entryName[entryPos]=ch; if(entryPos<NAME_LEN-1) entryPos++; }
+    return true;
+  }
+  if(e.key==='Backspace'){
+    e.preventDefault();
+    if(entryName[entryPos]===' ' && entryPos>0) entryPos--;
+    entryName[entryPos]=' ';
+    return true;
+  }
+  return false;
+}
+function updateEntry(){
+  if(consume('left')&&entryPos>0) entryPos--;
+  if(consume('right')&&entryPos<NAME_LEN-1) entryPos++;
+  if(consume('fwd')){ let i=NAME_CHARS.indexOf(entryName[entryPos]); entryName[entryPos]=NAME_CHARS[(i+1)%NAME_CHARS.length]; }
+  if(consume('back')){ let i=NAME_CHARS.indexOf(entryName[entryPos]); entryName[entryPos]=NAME_CHARS[(i-1+NAME_CHARS.length)%NAME_CHARS.length]; }
+  if(consume('start')||consume('fire')) commitEntry();
+}
+let scoresT=0;
+function openScores(){ hofRank=-1; scoresT=0; state='scores'; }
+
+/* ===================== OBRAZOVKY ===================== */
+function txt(g,str,x,y,size,col,align){
+  g.font=size+'px PixelArcade'; g.fillStyle=col; g.textAlign=align||'center'; g.fillText(str,x,y);
+}
+function drawTitle(){
+  const g=ctx;
+  g.fillStyle='#050403'; g.fillRect(0,0,W,H);
+  /* pekelné pozadí — pulzující mřížka */
+  g.save(); g.globalAlpha=0.16;
+  for(let i=0;i<14;i++){ const yy=180+i*i*3.2+Math.sin(tick*0.02)*4;
+    g.strokeStyle=i%2?'#9c2f1f':'#155047'; g.beginPath(); g.moveTo(0,yy); g.lineTo(W,yy); g.stroke(); }
+  g.restore();
+  if(headBig.complete&&headBig.naturalWidth){
+    const bob=Math.sin(tick*0.04)*6;
+    g.save(); g.globalAlpha=0.92;
+    g.drawImage(headBig, W/2-130, 150+bob, 260, 187);
+    /* naštvané doomové obočí */
+    g.fillStyle='#0d2a22';
+    g.save(); g.translate(W/2-52,208+bob); g.rotate(0.42); g.fillRect(-34,-7,62,14); g.restore();
+    g.save(); g.translate(W/2+52,208+bob); g.rotate(-0.42); g.fillRect(-28,-7,62,14); g.restore();
+    g.restore();
+  }
+  const gl=Math.sin(tick*0.06)*0.5+0.5;
+  g.save();
+  g.shadowColor='rgba(255,60,40,'+(0.5+gl*0.4)+')'; g.shadowBlur=26;
+  txt(g,'ŠKODOOM',W/2+4,104,58,'#3a0f0a');
+  txt(g,'ŠKODOOM',W/2,100,58,'#ff5d3d');
+  g.shadowColor='rgba(57,255,140,.8)'; g.shadowBlur=12;
+  txt(g,'ŠKODOOM',W/2-2,98,58,'#39ff8c');
+  g.restore();
+  txt(g,'KNEE-DEEP IN THE BUGS',W/2,138,12,'#ffcf2e');
+  txt(g,'TAJNA HRA SKOPILOT FAMILY',W/2,390,9,'#7e9a90');
+  const best=+localStorage.getItem(BEST_KEY)||0;
+  if(best) txt(g,'NEJLEPSI SKORE '+String(best).padStart(6,'0'),W/2,418,10,'#ffcf2e');
+  if((tick>>5)&1) txt(g,'STISKNI START',W/2,470,16,'#39ff8c');
+  txt(g,'SIPKY = POHYB   MEZERA = PALBA   X = UKROK/TLACIT   TAB = MAPA',W/2,516,8,'#3c8a6e');
+  txt(g,'JOYSTICK NAHORU = SIN SLAVY   P = PAUZA   ESC = MENU',W/2,538,8,'#3c5a52');
+  txt(g,'(c) 2026 SKODA - SKOPILOT FAMILY - EPISODE 1: DATA HELL',W/2,578,7,'#24514a');
+  if(consume('start')||consume('fire')){ pl.score=0; pl.armor=0; pl.ammo=50; pl.hp=100; storyT=0; state='story'; sfx('door'); }
+}
+const STORY=[
+  'MLADA BOLESLAV, 02:47 RANO.',
+  '',
+  'FIREMNI CLOUD HLASI KRITICKOU CHYBU.',
+  'V SERVEROVNE SE PREMNOZILY BUGY,',
+  'SPAM DEMONI A HALUCINACE MODELU.',
+  '',
+  'NEKDO NASADIL DO PIPELINE',
+  'NEOTESTOVANY KOD... V PATEK.',
+  '',
+  'SKOPILOT BERE SLUZEBNI DATOMET',
+  'A SESTUPUJE DO DATOVEHO PEKLA.',
+  '',
+  'NIKDO JINY TO NEUKLIDI.',
+];
+function drawStory(){
+  const g=ctx;
+  g.fillStyle='#050403'; g.fillRect(0,0,W,H);
+  storyT++;
+  const chars=Math.floor(storyT*1.6);
+  let used=0;
+  g.textAlign='center';
+  STORY.forEach((line,i)=>{
+    if(used>=chars) return;
+    const show=line.slice(0,Math.max(0,chars-used)); used+=line.length;
+    txt(g,show,W/2,120+i*30,11,i===0?'#ffcf2e':'#39ff8c');
+  });
+  if(runImg.complete&&runImg.naturalWidth) g.drawImage(runImg,W-190,H-200,120,152);
+  if(storyT>60&&(tick>>5)&1) txt(g,'START = HRAT',W/2,555,10,'#7e9a90');
+  if(consume('start')||consume('fire')){ loadLevel(0); bakeRows(); state='play'; sfx('exit'); }
+}
+function endLevel(){
+  stats.time=(performance.now()-stats.t0)/1000;
+  const kb=stats.killsT?Math.round(stats.kills/stats.killsT*100):100;
+  pl.score+=Math.max(0,Math.round((LEVELS[level].par-stats.time))*10);
+  pl.score+=kb*5;
+  interT=0; state='inter'; sfx('exit');
+}
+function pct(a,b){ return b?Math.round(a/b*100):100; }
+function drawInter(){
+  const g=ctx; interT++;
+  g.fillStyle='#050403'; g.fillRect(0,0,W,H);
+  txt(g,LEVELS[level].name+' HOTOVO',W/2,110,20,'#39ff8c');
+  const rows=[
+    ['ZABITI',   pct(stats.kills,stats.killsT)+'%'],
+    ['PREDMETY', pct(stats.items,stats.itemsT)+'%'],
+    ['TAJEMSTVI',pct(stats.secrets,stats.secretsT)+'%'],
+    ['CAS', Math.round(stats.time)+'s  (PAR '+LEVELS[level].par+'s)'],
+  ];
+  rows.forEach((r,i)=>{
+    if(interT>25+i*20){
+      txt(g,r[0],W/2-190,200+i*48,14,'#7e9a90','left');
+      txt(g,r[1],W/2+190,200+i*48,14,'#ffcf2e','right');
+      if(interT===26+i*20) sfx('pickup');
+    }
+  });
+  txt(g,'SKORE '+String(pl.score).padStart(6,'0'),W/2,430,16,'#39ff8c');
+  if(interT>120&&(tick>>5)&1) txt(g,level+1<LEVELS.length?'START = DALSI LEVEL':'START = FINALE',W/2,500,12,'#39ff8c');
+  if(interT>120&&(consume('start')||consume('fire'))){
+    if(level+1<LEVELS.length){ loadLevel(level+1); bakeRows(); state='play'; }
+    else finishGame();
+  }
+}
+function finishGame(){
+  const best=+localStorage.getItem(BEST_KEY)||0;
+  if(pl.score>best) localStorage.setItem(BEST_KEY,pl.score);
+  state='victory'; interT=0;
+}
+function drawVictory(){
+  const g=ctx; interT++;
+  g.fillStyle='#050403'; g.fillRect(0,0,W,H);
+  g.save(); g.globalAlpha=0.25;
+  for(let i=0;i<30;i++){ const a=tick*0.01+i; g.fillStyle=i%2?'#39ff8c':'#ffcf2e';
+    g.fillRect(W/2+Math.cos(a)*(120+i*8)-2, 260+Math.sin(a)*(80+i*5)-2, 4,4); }
+  g.restore();
+  txt(g,'DATOVE PEKLO VYCISTENO!',W/2,120,22,'#39ff8c');
+  if(runImg.complete&&runImg.naturalWidth) g.drawImage(runImg,W/2-70,170,140,178);
+  txt(g,'CLOUD ZASE BEZI. PIPELINE JE ZELENA.',W/2,395,11,'#a9c4ba');
+  txt(g,'SKOPILOT SI KONECNE DA KAFE.',W/2,420,11,'#a9c4ba');
+  txt(g,'FINALNI SKORE '+String(pl.score).padStart(6,'0'),W/2,470,15,'#ffcf2e');
+  if(interT>90&&(tick>>5)&1) txt(g,'STISKNI START',W/2,530,12,'#39ff8c');
+  if(interT>90&&(consume('start')||consume('fire'))){
+    if(qualifies(pl.score)) beginEntry('title'); else { openScores(); }
+  }
+}
+function drawOver(){
+  const g=ctx; overT++;
+  /* svět za tebou ještě chvíli dobíhá */
+  renderWorld();
+  g.fillStyle='rgba(60,0,0,'+Math.min(0.72,overT*0.012)+')'; g.fillRect(0,0,W,VIEW_H);
+  if(overT>40){
+    txt(g,'TVUJ KOD BYL TERMINOVAN',W/2,220,20,'#ff5d3d');
+    txt(g,'SKORE '+String(pl.score).padStart(6,'0'),W/2,270,12,'#ffcf2e');
+    if((tick>>5)&1) txt(g,'STISKNI START',W/2,330,12,'#39ff8c');
+  }
+  if(overT>60&&(consume('start')||consume('fire'))){
+    const best=+localStorage.getItem(BEST_KEY)||0;
+    if(pl.score>best) localStorage.setItem(BEST_KEY,pl.score);
+    if(qualifies(pl.score)) beginEntry('title'); else state='title';
+  }
+}
+function drawEntry(){
+  const g=ctx; updateEntry();
+  g.fillStyle='#050403'; g.fillRect(0,0,W,H);
+  txt(g,'NOVY REKORD!',W/2,130,22,'#ffcf2e');
+  txt(g,String(pl.score).padStart(6,'0'),W/2,180,16,'#39ff8c');
+  txt(g,'ZADEJ SVE JMENO',W/2,250,11,'#7e9a90');
+  for(let i=0;i<NAME_LEN;i++){
+    const x=W/2+(i-2)*56;
+    const active=i===entryPos&&((tick>>4)&1);
+    g.fillStyle=active?'#39ff8c':'#0d2a22'; g.fillRect(x-22,290,44,52);
+    g.fillStyle=active?'#04140f':'#39ff8c';
+    g.font='24px PixelArcade'; g.textAlign='center'; g.fillText(entryName[i],x,322);
+    g.fillStyle=i===entryPos?'#ffcf2e':'#155047'; g.fillRect(x-22,346,44,4);
+  }
+  txt(g,'NAHORU/DOLU = ZNAK   VLEVO/VPRAVO = POZICE',W/2,420,8,'#3c8a6e');
+  txt(g,'START = ULOZIT   (NEBO PIS NA KLAVESNICI)',W/2,442,8,'#3c8a6e');
+}
+function drawScores(){
+  const g=ctx; scoresT++;
+  g.fillStyle='#050403'; g.fillRect(0,0,W,H);
+  txt(g,'SIN SLAVY',W/2,100,24,'#ffcf2e');
+  txt(g,'- SKODOOM -',W/2,132,10,'#ff5d3d');
+  const h=loadHof();
+  if(!h.length) txt(g,'ZATIM ZADNE ZAZNAMY',W/2,280,11,'#3c5a52');
+  h.slice(0,5).forEach((e,i)=>{
+    const y=210+i*52, me=i===hofRank;
+    const col=me&&((tick>>4)&1)?'#ffcf2e':(i===0?'#39ff8c':'#a9c4ba');
+    txt(g,(i+1)+'.',W/2-220,y,14,col,'left');
+    txt(g,e.n,W/2-140,y,14,col,'left');
+    txt(g,String(e.s).padStart(6,'0'),W/2+220,y,14,col,'right');
+  });
+  if((tick>>5)&1) txt(g,'START = ZPET',W/2,530,11,'#39ff8c');
+  if(scoresT>30&&(consume('start')||consume('fire'))) state='title';
+}
+
+/* ===================== HLAVNÍ SMYČKA ===================== */
+let paused=false;
+function renderWorld(){
+  castView();
+  drawSprites();
+  if(!pl.dead) drawWeapon();
+  const sx=shake>0?(Math.random()-0.5)*shake*2:0, sy=shake>0?(Math.random()-0.5)*shake:0;
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,VIEW_H);
+  ctx.drawImage(buf,0,0,RW,RH,sx,sy,W,VIEW_H);
+  /* zaměřovač */
+  ctx.fillStyle='rgba(57,255,140,.6)';
+  ctx.fillRect(W/2-1,VIEW_H/2-6,2,4); ctx.fillRect(W/2-1,VIEW_H/2+2,2,4);
+  ctx.fillRect(W/2-6,VIEW_H/2-1,4,2); ctx.fillRect(W/2+2,VIEW_H/2-1,4,2);
+  if(flashRed>0){ ctx.fillStyle='rgba(255,20,10,'+(flashRed/60)+')'; ctx.fillRect(0,0,W,VIEW_H); }
+  if(flashGold>0){ ctx.fillStyle='rgba(255,207,46,'+(flashGold/90)+')'; ctx.fillRect(0,0,W,VIEW_H); }
+  if(god){ ctx.strokeStyle='rgba(255,207,46,'+(0.5+Math.sin(tick*0.1)*0.3)+')'; ctx.lineWidth=4; ctx.strokeRect(2,2,W-4,VIEW_H-4); }
+  drawHUD();
+  if(showMap) drawMinimap();
+  if(toastT>0){
+    ctx.textAlign='center'; ctx.font='11px PixelArcade';
+    ctx.fillStyle='rgba(4,20,15,.8)';
+    const w=toastMsg.length*11+30;
+    ctx.fillRect(W/2-w/2,26,w,30);
+    ctx.fillStyle=toastT>110?'#ffffff':'#39ff8c'; ctx.fillText(toastMsg,W/2,46);
+  }
+}
+function updatePlay(dt){
+  if(consume('pause')) paused=!paused;
+  if(consume('map')) showMap=!showMap;
+  if(paused) return;
+  updatePlayer(dt);
+  updateMobs(dt);
+  updateShots(dt);
+  updateDoors(dt);
+  updateParts(dt);
+  if(pl.fireAnim>0) pl.fireAnim-=dt;
+  if(pl.hurtT>0) pl.hurtT-=dt;
+  if(flashRed>0) flashRed-=dt*1.5;
+  if(flashGold>0) flashGold-=dt;
+  if(shake>0) shake-=dt*0.8;
+  if(toastT>0) toastT-=dt;
+  if(pl.dead){ state='over'; overT=0; }
+}
+let last=performance.now(), acc=0;
+function loop(now){
+  requestAnimationFrame(loop);
+  let dt=(now-last)/(1000/60); last=now;
+  if(dt>4) dt=4;
+  tick+=dt;
+  switch(state){
+    case 'title':   drawTitle(); break;
+    case 'story':   drawStory(); break;
+    case 'play':    updatePlay(dt); renderWorld();
+                    if(paused){ ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(0,0,W,H);
+                      txt(ctx,'PAUZA',W/2,H/2-20,26,'#39ff8c'); txt(ctx,'P = POKRACOVAT',W/2,H/2+30,10,'#7e9a90'); }
+                    break;
+    case 'inter':   drawInter(); break;
+    case 'over':    drawOver(); break;
+    case 'victory': drawVictory(); break;
+    case 'enter':   drawEntry(); break;
+    case 'scores':  drawScores(); break;
+  }
+  for(const k in justAction) justAction[k]=false;
+}
+requestAnimationFrame(loop);
+addEventListener('mousedown',wakeAudio);
+</script>
+</body>
+</html>
+</script>
+</body>
+</html>

@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ŠkoDOOM — Office FPS</title>
+  <style>
+    @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    *{cursor:none !important;}   /* kiosk: hide mouse cursor (Wayland-safe) */
+    /* menus: allow the mouse so buttons can be clicked */
+    body.allow-cursor, body.allow-cursor *{cursor:auto !important;}
+    html,body{height:100%;}
+    body{background:#040b09;display:flex;align-items:center;justify-content:center;height:100vh;
+      overflow:hidden;font-family:'PixelArcade','Courier New',monospace;color:#eef6f4;user-select:none;
+      image-rendering:pixelated;}
+    #bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+      background:radial-gradient(ellipse at 50% 40%, rgba(30,8,8,.5), rgba(4,11,9,.95) 80%),
+                 url('../assets/8bit/circuit.jpg') center/cover no-repeat; opacity:.35;}
+    body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+      background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);}
+    #stage{transform-origin:center center;position:relative;z-index:3;}
+    canvas{display:block;background:#06201d;border:3px solid #155047;image-rendering:pixelated;
+      box-shadow:0 0 0 3px #040b09, 0 0 0 5px #0c3329, 0 0 36px rgba(255,80,60,.22);}
+    #menuBtn{position:fixed;top:14px;left:14px;z-index:60;background:#0c2418;color:#c9ffe2;
+      border:2px solid #1f9c5e;padding:9px 14px;font-size:10px;letter-spacing:1px;
+      cursor:pointer;font-family:inherit;box-shadow:0 0 0 2px #040b09, 0 0 14px rgba(57,255,140,.25);}
+    #menuBtn:hover{background:#11331f;color:#39ff8c;}
+  </style>
+</head>
+<body>
+  <div id="bg"></div>
+  <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
+  <div id="stage"><canvas id="c" width="800" height="600"></canvas></div>
+<script>
+/* ============================================================
+   ŠkoDOOM — Office FPS
+   První Škopilot střílečka: pseudo-3D raycaster ve stylu DOOM.
+   Vanilla JS + Canvas, žádné závislosti, žádné externí assety
+   kromě fontu a maskota. Zvuk je syntetizovaný WebAudiem.
+   ============================================================ */
+
+/* ===================== SETUP ===================== */
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+const stage=document.getElementById('stage');
+const W=canvas.width, H=canvas.height;
+const VIEW_H=520, HUD_H=H-VIEW_H, HORIZON=VIEW_H/2;
+const NUMRAYS=400, COLW=W/NUMRAYS;            // 2px sloupce = retro chunky look
+const STEP=1000/60;
+function fit(){ const s=Math.min(innerWidth/stage.offsetWidth, innerHeight/stage.offsetHeight); stage.style.transform='scale('+s+')'; }
+addEventListener('resize',fit); addEventListener('load',fit); fit();
+
+const headImg=new Image(); headImg.src='../assets/skopilotHead.png';
+headImg.onload=()=>{ if(TH) buildTextures(); };   // plakáty s maskotem po načtení
+
+/* ===================== INPUT MANAGER (config) ===================== */
+const KEYMAP = {
+  fwd:   ['w','W','ArrowUp'],
+  back:  ['s','S','ArrowDown'],
+  left:  ['a','A'],
+  right: ['d','D'],
+  turnL: ['ArrowLeft','q','Q'],
+  turnR: ['ArrowRight','e','E'],
+  use:   [' '],                    // Space = interakce (dveře, výtah)
+  fire:  ['Control','x','X'],      // záloha bez myši
+  pause: ['p','P','Escape'],
+  mute:  ['m','M'],
+};
+const action={}, justAction={};
+function setActions(key,val,track){
+  for(const a in KEYMAP){ if(KEYMAP[a].includes(key)){ if(val && !action[a] && track) justAction[a]=true; action[a]=val; } }
+}
+addEventListener('keydown',e=>{
+  if(e.key>='1' && e.key<='5'){ switchWeapon(+e.key-1); return; }
+  if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+  setActions(e.key,true,true);
+});
+addEventListener('keyup',e=>setActions(e.key,false,false));
+function consume(a){ if(justAction[a]){ justAction[a]=false; return true; } return false; }
+
+/* myš: pointer lock = míření, tlačítko = palba, kolečko = zbraně */
+let mouseDown=false, locked=false;
+canvas.addEventListener('click',()=>{
+  initAudio();
+  if(state==='title'){ startGame(); return; }
+  if(state==='inter'){ nextLevel(); return; }
+  if(state==='over'||state==='win'){ backToTitle(); return; }
+  if(state==='play' && !locked) grabPointer();
+});
+document.addEventListener('pointerlockchange',()=>{
+  locked = document.pointerLockElement===canvas;
+  if(!locked && state==='play') pauseGame();
+});
+addEventListener('mousemove',e=>{ if(locked && state==='play'){ cam.a += e.movementX*0.0026; } });
+addEventListener('mousedown',e=>{ if(e.button===0) mouseDown=true; });
+addEventListener('mouseup',e=>{ if(e.button===0) mouseDown=false; });
+addEventListener('wheel',e=>{ if(state==='play') cycleWeapon(e.deltaY>0?1:-1); });
+function grabPointer(){
+  if(!canvas.requestPointerLock) return;
+  const p=canvas.requestPointerLock();
+  if(p && p.catch) p.catch(()=>{});
+}
+
+/* ===================== AUDIO (WebAudio synth) ===================== */
+let actx=null, muted=false, musicGain=null, musStep=0, musNext=0, musTimer=null;
+function initAudio(){
+  if(actx) return;
+  try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+  musicGain=actx.createGain(); musicGain.gain.value=0.16; musicGain.connect(actx.destination);
+}
+function tone(f,f2,dur,type,vol,when){
+  if(!actx||muted) return;
+  const t=(when!==undefined?when:actx.currentTime);
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type=type||'square'; o.frequency.setValueAtTime(f,t);
+  if(f2) o.frequency.exponentialRampToValueAtTime(Math.max(20,f2),t+dur);
+  g.gain.setValueAtTime(vol||0.12,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t+dur+0.02);
+}
+function noiseHit(dur,vol,when){
+  if(!actx||muted) return;
+  const t=(when!==undefined?when:actx.currentTime);
+  const n=actx.sampleRate*dur, buf=actx.createBuffer(1,n,actx.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+  const s=actx.createBufferSource(); s.buffer=buf;
+  const g=actx.createGain(); g.gain.value=vol;
+  s.connect(g); g.connect(actx.destination); s.start(t);
+}
+const SFX={
+  shoot0(){ tone(300,90,0.14,'square',0.10); },                       // powerpoint
+  shoot1(){ noiseHit(0.16,0.14); tone(160,60,0.16,'sawtooth',0.10); },// excel cannon
+  shoot2(){ tone(520,240,0.06,'square',0.07); },                      // sap blaster
+  shoot3(){ tone(120,40,0.28,'sawtooth',0.13); noiseHit(0.2,0.08); }, // coffee gun
+  shoot4(){ tone(880,1600,0.12,'sine',0.09); tone(440,880,0.12,'square',0.05); }, // AI ray
+  hit(){ noiseHit(0.06,0.08); },
+  kill(){ tone(440,110,0.25,'square',0.10); tone(220,55,0.3,'triangle',0.08); },
+  hurt(){ tone(180,70,0.2,'sawtooth',0.13); },
+  pickup(){ tone(660,660,0.08,'square',0.09); tone(880,880,0.1,'square',0.09,actx?actx.currentTime+0.09:0); },  // "notifikace"
+  powerup(){ [523,659,784,1047].forEach((f,i)=>tone(f,f,0.09,'square',0.09,actx?actx.currentTime+i*0.07:0)); },
+  key(){ [392,523,659,784].forEach((f,i)=>tone(f,f,0.08,'triangle',0.10,actx?actx.currentTime+i*0.06:0)); },
+  door(){ tone(90,180,0.5,'triangle',0.10); },
+  denied(){ tone(130,110,0.22,'square',0.13); tone(98,90,0.26,'square',0.11,actx?actx.currentTime+0.18:0); },
+  fanfare(){ [523,659,784,1047,784,1047].forEach((f,i)=>tone(f,f,0.13,'square',0.11,actx?actx.currentTime+i*0.11:0)); },
+  boss(){ tone(70,45,0.9,'sawtooth',0.16); tone(105,60,0.9,'square',0.09); },
+  blip(){ tone(1200,1200,0.03,'square',0.04); },
+};
+/* retro FPS riff — pumpující basa + hi-hat, inspirováno klasikou */
+const BASS=[0,0,12,0, 0,10,0,0, 0,0,12,0, 0,8,7,10,
+            0,0,12,0, 0,10,0,0, 0,0,15,0, 13,12,10,8];
+const LEAD=[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+            24,-1,22,-1,19,-1,15,-1,17,-1,15,-1,12,-1,10,-1];
+function musicNote(step,when){
+  const spb=60/152/2;                          // 152 BPM, osminy
+  const b=BASS[step%BASS.length];
+  const f=82.41*Math.pow(2,b/12);
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type='sawtooth'; o.frequency.value=f;
+  g.gain.setValueAtTime(0.9,when); g.gain.exponentialRampToValueAtTime(0.05,when+spb*0.9);
+  o.connect(g); g.connect(musicGain); o.start(when); o.stop(when+spb);
+  const l=LEAD[step%LEAD.length];
+  if(l>=0){
+    const o2=actx.createOscillator(), g2=actx.createGain();
+    o2.type='square'; o2.frequency.value=82.41*Math.pow(2,l/12);
+    g2.gain.setValueAtTime(0.25,when); g2.gain.exponentialRampToValueAtTime(0.02,when+spb*1.6);
+    o2.connect(g2); g2.connect(musicGain); o2.start(when); o2.stop(when+spb*1.7);
+  }
+  if(step%2===0){ const n=actx.createBufferSource(), nb=actx.createBuffer(1,900,actx.sampleRate), nd=nb.getChannelData(0);
+    for(let i=0;i<900;i++) nd[i]=(Math.random()*2-1)*(1-i/900);
+    n.buffer=nb; const ng=actx.createGain(); ng.gain.value=step%8===0?0.30:0.12;
+    n.connect(ng); ng.connect(musicGain); n.start(when); }
+}
+function startMusic(){
+  if(!actx||musTimer) return;
+  musStep=0; musNext=actx.currentTime+0.05;
+  musTimer=setInterval(()=>{
+    if(muted||state==='pause'){ musNext=Math.max(musNext,actx.currentTime+0.05); return; }
+    const spb=60/152/2;
+    while(musNext<actx.currentTime+0.18){ musicNote(musStep,musNext); musNext+=spb; musStep++; }
+  },60);
+}
+function stopMusic(){ if(musTimer){ clearInterval(musTimer); musTimer=null; } }
+
+/* ===================== PIXEL ART ===================== */
+function makeSprite(rows,pal){
+  const h=rows.length, w=Math.max(...rows.map(r=>r.length));
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  const g=cv.getContext('2d');
+  for(let y=0;y<h;y++) for(let x=0;x<rows[y].length;x++){
+    const ch=rows[y][x]; if(ch==='.'||ch===' ') continue;
+    g.fillStyle=pal[ch]||'#f0f'; g.fillRect(x,y,1,1);
+  }
+  return cv;
+}
+
+const ART={};
+/* --- Meeting Monster: fialový blob s kalendářem na břiše --- */
+ART.m=makeSprite([
+'....KKKKKKKK....',
+'...KPPPPPPPPK...',
+'..KPPPPPPPPPPK..',
+'.KPWWKPPPPKWWPK.',
+'.KPWKKPPPPKKWPK.',
+'.KPPPPPPPPPPPPK.',
+'.KPPKRRRRRRKPPK.',
+'.KPPKRWRWRWKPPK.',
+'.KPPPKKKKKKPPPK.',
+'.KPDWWWWWWWWDPK.',
+'.KPDWKWKWKWWDPK.',
+'.KPDWWWWWWWWDPK.',
+'.KPDWKWKWKWWDPK.',
+'.KPPPPPPPPPPPPK.',
+'..KPPKPPPPKPPK..',
+'..KPPK.KK.KPPK..',
+'...KK.:....KK...',
+'..KDDK....KDDK..',
+],{K:'#1a1030',P:'#7a4fd1',D:'#5a36a8',W:'#ffffff',R:'#ff4d6a'});
+/* --- Mandatory Training Skeleton: kostlivec s promoční čepicí --- */
+ART.t=makeSprite([
+'..CCCCCCCCCCCC..',
+'..CCCCCCCCCCYC..',
+'....KWWWWWWKYC..',
+'...KWWWWWWWWK...',
+'...KWKKWWKKWK...',
+'...KWWWWWWWWK...',
+'...KWWKKKKWWK...',
+'....KWKWWKWK....',
+'.....KWWWWK.....',
+'..KWWWWWWWWWWK..',
+'.KWK.KWWWWK.KWK.',
+'.KWK.KWKKWK.KWK.',
+'.KSSK.KWWK.KWWK.',
+'.KSSK.KWWK..KK..',
+'..KK.KWKKWK.....',
+'.....KWK.KWK....',
+'....KWK...KWK...',
+'...KKK.....KKK..',
+],{K:'#101418',W:'#e8ecf2',C:'#2d3742',Y:'#ffd23f',S:'#ffe9a8'});
+/* --- Approval Demon: rudý démon s razítkem REJECTED --- */
+ART.a=makeSprite([
+'..KK........KK..',
+'.KDDK......KDDK.',
+'.KDDDK....KDDDK.',
+'..KRRKKKKKKRRK..',
+'..KRRRRRRRRRRK..',
+'.KRWWKRRRRKWWRK.',
+'.KRWKKRRRRKKWRK.',
+'.KRRRRRRRRRRRRK.',
+'.KRRKWKWKWKKRRK.',
+'..KRRKKKKKKRRK..',
+'..KRRRRRRRRRRK..',
+'.KRRKRRRRRRKRRK.',
+'.KSSKRRRRRRKRRK.',
+'.KSSKKRRRRKKHHK.',
+'.KSSK.KRRK.KHHK.',
+'..KK.KRKKRK.KK..',
+'.....KRK.KRK....',
+'....KKK...KKK...',
+],{K:'#210a0a',R:'#e23d3d',D:'#a32626',W:'#ffffff',S:'#f2e6d8',H:'#6b4a2f'});
+/* --- Legacy System Beast: rozzuřený CRT monitor na kabelech --- */
+ART.l=makeSprite([
+'.KKKKKKKKKKKKKK.',
+'.KGGGGGGGGGGGGK.',
+'.KGKKKKKKKKKKGK.',
+'.KGKSSSSSSSSKGK.',
+'.KGKSNSSSSNSKGK.',
+'.KGKSNSSSSNSKGK.',
+'.KGKSSSSSSSSKGK.',
+'.KGKSNNNNNNSKGK.',
+'.KGKSSSSSSSSKGK.',
+'.KGKKKKKKKKKKGK.',
+'.KGGYGGGGGGYGGK.',
+'.KGGGGKGGKGGGGK.',
+'.KKKKKKKKKKKKKK.',
+'..KDDK....KDDK..',
+'..KDDK....KDDK..',
+'.KDDK..KK..KDDK.',
+'.KDK..KDDK..KDK.',
+'.KKK..KKKK..KKK.',
+],{K:'#14181d',G:'#9aa3ad',D:'#5c646e',S:'#0f2b1a',N:'#39ff8c',Y:'#ffd23f'});
+/* --- Excel Necromancer: zelený čaroděj v hábitu z tabulek --- */
+ART.x=makeSprite([
+'......KKKK......',
+'.....KGGGGK.....',
+'....KGGGGGGK....',
+'...KGGKKKKGGK...',
+'...KGKFFFFKGK...',
+'...KGKFKKFKGK...',
+'...KGKFFFFKGK...',
+'...KGGKKKKGGK...',
+'..KGGGGGGGGGGK..',
+'.KSKGWLWLWLWGK..',
+'.KSKGLWLWLWLGK..',
+'.KWKGWLWLWLWGK..',
+'.KSKGLWLWLWLGK..',
+'.KSKGWLWLWLWGK..',
+'.KSKGGGGGGGGGK..',
+'.KSKGGGGGGGGGK..',
+'..K.KGGK.KGGK...',
+'....KKKK.KKKK...',
+],{K:'#0b1f14',G:'#1e7a45',L:'#2fae63',W:'#d7ffe6',F:'#b7f5cd',S:'#8a5a2b'});
+/* --- VPN Phantom: bledě modrý duch se zámkem --- */
+ART.v=makeSprite([
+'.....KKKKKK.....',
+'...KKBBBBBBKK...',
+'..KBBBBBBBBBBK..',
+'..KBKKBBBBKKBK..',
+'..KBKKBBBBKKBK..',
+'..KBBBBBBBBBBK..',
+'..KBBBKKKKBBBK..',
+'..KBBBKBBKBBBK..',
+'..KBBBBBBBBBBK..',
+'..KBBKYYYYKBBK..',
+'..KBBKYKKYKBBK..',
+'..KBBKYYYYKBBK..',
+'..KBBBBBBBBBBK..',
+'..KBBBBBBBBBBK..',
+'..KBDBBDBBDBBK..',
+'..KBKBBKBBKBBK..',
+'...K.KB.KB.KK...',
+'......K..K......',
+],{K:'#12202e',B:'#bfe3ff',D:'#7fb3e0',Y:'#ffd23f'});
+/* --- BOSS: Chief Approval Officer — obří démon s kravatou a razítkem --- */
+ART.cao=makeSprite([
+'..KKK..........KKK..',
+'.KDDDK........KDDDK.',
+'.KDDDDK......KDDDDK.',
+'..KKRRKKKKKKKKRRKK..',
+'..KRRRRRRRRRRRRRRK..',
+'.KRWWWKRRRRRRKWWWRK.',
+'.KRWKKKRRRRRRKKKWRK.',
+'.KRRRRRRRRRRRRRRRRK.',
+'.KRRKWWKWWKWWKKRRRK.',
+'..KRRKKKKKKKKKRRRK..',
+'..KRRRRRTTRRRRRRK...',
+'.KRRRRRKTTKRRRRRRK..',
+'.KRRRRRKTTKRRRRRRK..',
+'.KSSSKRRTTRRRKHHHK..',
+'.KSWSKRRRRRRRKHHHK..',
+'.KSSSKKRRRRKKKHHHK..',
+'..KKK.KRRRRK..KKK...',
+'.....KRRKKRRK.......',
+'.....KRK..KRK.......',
+'....KKK....KKK......',
+],{K:'#210a0a',R:'#e23d3d',D:'#7a1414',W:'#ffffff',T:'#2d5fd1',S:'#f2e6d8',H:'#6b4a2f'});
+/* --- BOSS: Master of Bureaucracy — golem ze šanonů a papírů --- */
+ART.mob=makeSprite([
+'...KKKKKKKKKKKK.....',
+'..KWWWWWWWWWWWWK....',
+'..KWKKWWWWWWKKWK....',
+'..KWKKWWWWWWKKWK....',
+'..KWWWWKKKKWWWWK....',
+'..KWWKKKKKKKKWWK....',
+'..KKKKKKKKKKKKKK....',
+'.KFFFFFFFFFFFFFFK...',
+'.KFKFKFKFKFKFKFFK...',
+'.KFFFFFFFFFFFFFFK...',
+'KWWWWKKKKKKKKWWWWK..',
+'KWWWWKRRRRRRKWWWWK..',
+'KWWWWKKKKKKKKWWWWK..',
+'KWWWWKFFFFFFKWWWWK..',
+'KKWWKKFKFKFFKKWWKK..',
+'.KKKKKFFFFFFKKKKK...',
+'.....KWWWWWWK.......',
+'....KWWKKKKWWK......',
+'....KWWK..KWWK......',
+'....KKKK..KKKK......',
+],{K:'#1c1a14',W:'#e9e4d4',F:'#e0b64f',R:'#c23b3b'});
+/* --- FINAL BOSS: The Infinite Process — vír s loading kolečkem --- */
+ART.inf=makeSprite([
+'......KKKKKKKK......',
+'....KKVVVVVVVVKK....',
+'...KVVCCVVVVCCVVK...',
+'..KVVCVVVVVVVVCVVK..',
+'..KVCVVKKVVKKVVCVK..',
+'.KVVCVKWWVVWWKVCVVK.',
+'.KVVVVKWKVVKWKVVVVK.',
+'.KVCVVVVVVVVVVVVCVK.',
+'.KVCVVKVVKKVVKVVCVK.',
+'.KVVCVVKKVVKKVVCVVK.',
+'.KVVVCVVVVVVVVCVVVK.',
+'.KVVVVCCVVVVCCVVVVK.',
+'..KVVVVVCCCCVVVVVK..',
+'..KVVVVVVVVVVVVVK...',
+'...KVVKVVVVKVVVK....',
+'....KKVKKKKVKKK.....',
+'.....KVK..KVK.......',
+'....KVK....KVK......',
+'...KVK......KVK.....',
+'...KK........KK.....',
+],{K:'#150c26',V:'#3b2a5e',C:'#4dd8ff',W:'#ffffff'});
+
+/* --- itemy 12×12 --- */
+ART.coffee=makeSprite([
+'...S..S.....','..S..S......','...S..S.....','............','.KKKKKKKK...','.KWWWWWWKKK.',
+'.KWCCCCWKBK.','.KWCCCCWKBK.','.KWCCCCWKK..','.KWWWWWWK...','..KKKKKK....','.KKKKKKKK...',
+],{K:'#20140a',W:'#f2e6d8',C:'#5a3218',B:'#f2e6d8',S:'#cfd8dc'});
+ART.health=makeSprite([
+'.KKKKKKKKKK.','KWWWWWWWWWWK','KWWWWRRWWWWK','KWWWWRRWWWWK','KWWRRRRRRWWK','KWWRRRRRRWWK',
+'KWWWWRRWWWWK','KWWWWRRWWWWK','KWWWWWWWWWWK','KWWWWWWWWWWK','.KKKKKKKKKK.','............',
+],{K:'#2a2a2a',W:'#f4f7f5',R:'#e23d3d'});
+ART.fast=makeSprite([
+'....KKKK....','...KHHHHK...','...KHHHHK...','....KHHK....','...KKKKKK...','..KGGGGGGK..',
+'.KGGWWWWGGK.','.KGWKWWKWGK.','.KGWWKKWWGK.','.KGGWWWWGGK.','..KGGGGGGK..','...KKKKKK...',
+],{K:'#0b1f14',G:'#2fae63',W:'#eafff2',H:'#8a5a2b'});
+ART.vpn=makeSprite([
+'....KKKK....','...KYYYYK...','..KY....YK..','..KY....YK..','.KKKKKKKKKK.','.KYYYYYYYYK.',
+'.KYYYKKYYYK.','.KYYYKKYYYK.','.KYYYYYYYYK.','.KYYYYYYYYK.','..KYYYYYYK..','...KKKKKK...',
+],{K:'#12202e',Y:'#4da3ff'});
+ART.boost=makeSprite([
+'.....KK.....','....KRRK....','....KRRK....','...KRWWRK...','...KRWWRK...','...KRRRRK...',
+'..KRRRRRRK..','..KRKRRKRK..','.KRKKRRKKRK.','.KK.KFFK.KK.','....KFFK....','...KF..FK...',
+],{K:'#26100c',R:'#e05c3a',W:'#cfeaff',F:'#ffd23f'});
+ART.friday=makeSprite([
+'..K..KK..K..','.KYK.YY.KYK.','..KYYYYYYK..','..KYYYYYYK..','.KYKKYYKKYK.','KYYKKYYKKYYK',
+'.KYYYYYYYYK.','..KYKYYKYK..','..KYYKKYYK..','.KYK.YY.KYK.','..K.KYYK.K..','.....KK.....',
+],{K:'#3a2c04',Y:'#ffd23f'});
+function cardArt(col){ return makeSprite([
+'.KKKKKKKKKK.','KWWWWWWWWWWK','KWCCCCCCCCWK','KWCCCCCCCCWK','KWWWWWWWWWWK','KWKKWWWWWWWK',
+'KWKKWWKKKKWK','KWWWWWKKKKWK','KWWWWWWWWWWK','.KKKKKKKKKK.','............','............',
+],{K:'#101418',W:'#e8ecf2',C:col}); }
+ART.keyr=cardArt('#e23d3d'); ART.keyb=cardArt('#4da3ff'); ART.keyg=cardArt('#ffd23f');
+ART.wpn=makeSprite([
+'............','.KKKKKKKKKK.','KWBBBBBBBBWK','KBKKKKKKKKBK','KBKYYKKYYKBK','KBKYYKKYYKBK',
+'KBKKKKKKKKBK','KBKYKYYKYKBK','KBKKKKKKKKBK','KWBBBBBBBBWK','.KKKKKKKKKK.','............',
+],{K:'#20140a',B:'#6b4a2f',W:'#a9825e',Y:'#ffd23f'});
+/* projektily 6×6 */
+function dotArt(col,edge){ return makeSprite(['.KKKK.','KCCCCK','KCWWCK','KCWWCK','KCCCCK','.KKKK.'],{K:edge,C:col,W:'#ffffff'}); }
+
+/* ===================== ENEMY / WEAPON DEFS ===================== */
+const ETYPES={
+  m:{name:'MEETING MONSTER',   hp:30, spd:0.024, melee:8,  score:100, scale:0.72, art:'m'},
+  t:{name:'TRAINING SKELETON', hp:22, spd:0.018, score:120, scale:0.76, art:'t', shoot:{dmg:7, spd:0.10, cd:120, color:'#ffd23f'}},
+  a:{name:'APPROVAL DEMON',    hp:40, spd:0.020, score:150, scale:0.78, art:'a', shoot:{dmg:9, spd:0.12, cd:100, color:'#ff5d5d'}},
+  v:{name:'VPN PHANTOM',       hp:26, spd:0.042, melee:7,  score:140, scale:0.72, art:'v', ghost:true},
+  x:{name:'EXCEL NECROMANCER', hp:55, spd:0.016, score:220, scale:0.80, art:'x', shoot:{dmg:11, spd:0.13, cd:90, color:'#39ff8c', n:2}},
+  l:{name:'LEGACY SYSTEM BEAST',hp:100,spd:0.014, melee:15, score:260, scale:0.88, art:'l'},
+  cao:{name:'CHIEF APPROVAL OFFICER', hp:380, spd:0.017, score:1000, scale:1.15, art:'cao', boss:true,
+       shoot:{dmg:10, spd:0.11, cd:70, color:'#ff5d5d', n:3, spread:0.35}},
+  mob:{name:'MASTER OF BUREAUCRACY', hp:550, spd:0.013, score:1500, scale:1.2, art:'mob', boss:true, summon:'t',
+       shoot:{dmg:12, spd:0.13, cd:80, color:'#e0b64f'}},
+  inf:{name:'THE INFINITE PROCESS', hp:850, spd:0.012, score:3000, scale:1.3, art:'inf', boss:true, radial:8,
+       shoot:{dmg:11, spd:0.10, cd:26, color:'#4dd8ff'}},
+};
+const WEAPONS=[
+  {name:'POWERPOINT LAUNCHER', cost:0, cd:24, dmg:12, spd:0.22, color:'#ff8c3a', size:0.30},
+  {name:'EXCEL CANNON',        cost:4, cd:44, dmg:8,  spd:0.26, color:'#39ff8c', size:0.18, pellets:5, spread:0.24},
+  {name:'SAP BLASTER',         cost:1, cd:8,  dmg:7,  spd:0.30, color:'#4da3ff', size:0.16},
+  {name:'COFFEE BOOST GUN',    cost:6, cd:55, dmg:34, spd:0.17, color:'#b06a2c', size:0.34, splash:1.4},
+  {name:'AI COPILOT RAY',      cost:3, cd:16, dmg:26, color:'#c9a0ff', hitscan:true},
+];
+const PROJ_ART={};
+WEAPONS.forEach((w,i)=>{ if(!w.hitscan) PROJ_ART['w'+i]=dotArt(w.color,'#111'); });
+PROJ_ART.e=dotArt('#ff5d5d','#210a0a'); // fallback
+
+const ITEMS={
+  c:{art:'coffee', msg:'EXTRA COFFEE +35 ⚡', joke:'Espresso acquired. Productivity +200%. Jitters +400%.'},
+  h:{art:'health', msg:'FIRST AID KIT +25 HP', joke:'Patched with a band-aid and a positive attitude.'},
+  f:{art:'fast',   msg:'FAST APPROVAL! RAPID FIRE 10s', joke:'Approved on first try. Frame this moment.'},
+  u:{art:'vpn',    msg:'UNLIMITED VPN! INVULNERABLE 8s', joke:'Connection secured. Nobody can reach you now. Nobody.'},
+  p:{art:'boost',  msg:'PRODUCTIVITY BOOST! 2x DAMAGE 10s', joke:'You now do the work of 1.0 FTE. Incredible.'},
+  y:{art:'friday', msg:'FRIDAY AFTERNOON MODE! ENEMIES SLOW 10s', joke:'It is 14:00 on Friday. The office is legally empty.'},
+  r:{art:'keyr',   key:'r', msg:'RED KEYCARD ACQUIRED'},
+  b:{art:'keyb',   key:'b', msg:'BLUE KEYCARD ACQUIRED'},
+  g:{art:'keyg',   key:'g', msg:'GOLD KEYCARD ACQUIRED'},
+  W:{art:'wpn',    msg:'NEW WEAPON!'},
+};
+
+/* ===================== CORPORATE JOKES ===================== */
+const JOKES=[
+  'This meeting could have been an email.',
+  'Your approval request #8472 was forwarded... again.',
+  "Mandatory training 'Safety in Meetings' expired 3 days ago.",
+  'The coffee machine on floor 2 is out of order. Again.',
+  'SAP will be unavailable this weekend. And most weekdays.',
+  'Someone booked MEETING ROOM 4 until the year 2031.',
+  'Please update your password. It must differ from your last 847.',
+  'The printer on floor 3 is haunted. IT is scared too.',
+  'Reply-all storm detected in ALL-EMPLOYEES. Take cover.',
+  'Your VPN connection is stable. Just kidding.',
+  'Excel has stopped responding. It never really responded.',
+  'New process update: the process for updating processes was updated.',
+  "Ticket #1337 closed: 'works as intended'. It does not.",
+  'Free cake in the kitchen! (This message is 4 days old.)',
+  'Your timesheet for filling timesheets is due.',
+  'ŠkoPilot tip: CTRL+C, CTRL+V is not a personality.',
+  'The elevator is under maintenance. The stairs are under review.',
+  'Achievement unlocked: survived a 3-hour alignment call.',
+  'Clean desk policy audit at 15:00. Hide everything.',
+  "Wi-Fi 'Guest2' is faster than the corporate network. Shhh.",
+  'Budget approved! (For the next approval round.)',
+  'Legal reviewed your joke. It is now 40 pages long.',
+  "OneDrive is 99% full of files named 'final_v2_REALfinal'.",
+  'Fun fact: this corridor is not up to fire code. Run faster.',
+  'Your calendar has declined your lunch on your behalf.',
+];
+const KILL_JOKES=[
+  'Meeting declined!','Request escalated to /dev/null!','Legacy system decommissioned!',
+  'Certificate revoked!','Phantom disconnected!','Spreadsheet closed without saving!',
+  'Out-of-office: forever.','Process terminated successfully.',
+];
+
+/* ===================== TEXTURES ===================== */
+const TS=64;
+function makeTex(fn){
+  const cv=document.createElement('canvas'); cv.width=TS; cv.height=TS;
+  const g=cv.getContext('2d'); fn(g);
+  // jemný pixel-noise, ať stěny nejsou sterilní
+  for(let i=0;i<130;i++){ g.fillStyle='rgba(0,0,0,'+(Math.random()*0.08)+')';
+    g.fillRect((Math.random()*TS)|0,(Math.random()*TS)|0,2,2); }
+  g.fillStyle='rgba(0,0,0,0.25)'; g.fillRect(0,TS-4,TS,4);
+  return cv;
+}
+function panelTex(base,seam,accent){
+  return makeTex(g=>{
+    g.fillStyle=base; g.fillRect(0,0,TS,TS);
+    g.strokeStyle=seam; g.lineWidth=2;
+    g.strokeRect(3,3,TS-6,TS-6);
+    g.beginPath(); g.moveTo(TS/2,3); g.lineTo(TS/2,TS-3); g.stroke();
+    if(accent){ g.fillStyle=accent; g.fillRect(0,0,TS,5); }
+  });
+}
+function glassTex(frame,tint){
+  return makeTex(g=>{
+    g.fillStyle=tint; g.fillRect(0,0,TS,TS);
+    g.fillStyle='rgba(255,255,255,0.16)';
+    g.beginPath(); g.moveTo(8,TS); g.lineTo(34,0); g.lineTo(46,0); g.lineTo(20,TS); g.closePath(); g.fill();
+    g.strokeStyle=frame; g.lineWidth=5; g.strokeRect(2,2,TS-4,TS-4);
+    g.beginPath(); g.moveTo(TS/2,2); g.lineTo(TS/2,TS-2); g.stroke();
+  });
+}
+function posterTex(base,seam){
+  return makeTex(g=>{
+    g.fillStyle=base; g.fillRect(0,0,TS,TS);
+    g.strokeStyle=seam; g.lineWidth=2; g.strokeRect(3,3,TS-6,TS-6);
+    g.fillStyle='#e9e4d4'; g.fillRect(12,8,40,48);
+    g.strokeStyle='#333'; g.lineWidth=1; g.strokeRect(12,8,40,48);
+    if(headImg.complete && headImg.naturalWidth) g.drawImage(headImg,20,12,24,24);
+    g.fillStyle='#222'; g.font='6px monospace'; g.textAlign='center';
+    g.fillText('OBEY THE',32,44); g.fillText('PROCESS',32,52);
+  });
+}
+function doorTex(stripe){
+  return makeTex(g=>{
+    g.fillStyle='#4a545e'; g.fillRect(0,0,TS,TS);
+    g.fillStyle='#39424b'; g.fillRect(4,4,TS-8,TS-8);
+    g.fillStyle='#5c6670'; g.fillRect(TS/2-2,4,4,TS-8);
+    g.fillStyle='#c9d2da'; g.fillRect(10,32,6,10);
+    if(stripe){ g.fillStyle=stripe; g.fillRect(4,10,TS-8,8); g.fillRect(4,TS-18,TS-8,8);
+      g.fillStyle='#111'; g.font='7px monospace'; g.textAlign='center'; g.fillText('ACCESS',TS/2,26); }
+  });
+}
+function exitTex(){
+  return makeTex(g=>{
+    g.fillStyle='#15251c'; g.fillRect(0,0,TS,TS);
+    g.strokeStyle='#0a120d'; g.lineWidth=4; g.strokeRect(2,2,TS-4,TS-4);
+    g.fillStyle='#0a3d22'; g.fillRect(8,14,TS-16,42);
+    g.fillStyle='#39ff8c'; g.font='10px monospace'; g.textAlign='center';
+    g.fillText('EXIT',TS/2,30); g.fillText('▲',TS/2,46);
+    g.fillStyle='#ffd23f'; g.fillRect(8,6,TS-16,4);
+  });
+}
+
+/* ===================== LEVELS ===================== */
+/* Mapová legenda:  # % = !  zdi · D dveře · R/B/G zamčené dveře · E výtah (exit)
+   P start · m t a v x l nepřátelé · Q boss · c h f u p y itemy · r b g karty · W zbraň */
+const LEVELS=[
+{ name:'LEVEL 1 · OPEN SPACE NIGHTMARE', boss:null, weaponGift:null,
+  intro:['Monday, 7:58. The open space is crawling','with meetings that want YOU.','Find the RED keycard, reach the elevator.'],
+  th:{ wallA:['#b8a988','#8f8266'], wallB:['#4d6a8a','#3a516b'], glass:['#155047','#0f3a33'],
+       floor:'#3d4550', floorD:'#262c34', ceil:'#20262e', ceilD:'#12161c', fog:'#0a0d11' },
+  map:[
+  '############################',
+  '#P.....#......m....#..c..h.#',
+  '#......#...........D.......#',
+  '#..t...D......t....#..m....#',
+  '#......#...........####D####',
+  '###%%###....m..............#',
+  '#..c...#..........%%%D%%%..#',
+  '#......#....m.....%.....%..#',
+  '#..t...#..........%..f..%..#',
+  '#......####D######%.....%..#',
+  '#..m.........#....%%%%%%%..#',
+  '#............#..r..........#',
+  '#.....t......#.....####R####',
+  '#..h.........#..m..#......c#',
+  '###!#D########.....#..p....#',
+  '#...c....#...m....#####D####',
+  '#..m..t..#........#....m...#',
+  '#........#...c....#..t.....#',
+  '#...p....#........#.....h..#',
+  '#####################EE#####',
+  ]},
+{ name:'LEVEL 2 · ENDLESS MEETING COMPLEX', boss:'cao', weaponGift:1,
+  intro:['Tuesday. Every room is a meeting room.','Every meeting spawns another meeting.','The CHIEF APPROVAL OFFICER must sign','your exit pass. Take it by force.'],
+  th:{ wallA:['#31455e','#233247'], wallB:['#e9e4d4','#bdb7a4'], glass:['#155047','#0f3a33'],
+       floor:'#2c3644', floorD:'#1a2029', ceil:'#1d2530', ceilD:'#10151d', fog:'#080b10' },
+  map:[
+  '##############################',
+  '#P....#...m...=....a...#..c..#',
+  '#.....D.......=........D.....#',
+  '#..c..#...t...=....m...#..h..#',
+  '#.....#####D######D#####..m..#',
+  '#..W..#....................t.#',
+  '#######..%%%%%..%%%%%..#######',
+  '#..a..#..%...%..%...%..#..f..#',
+  '#.....D..%.c.%..%.h.%..D.....#',
+  '#..m..#..%...D..D...%..#..v..#',
+  '#..t..#..%%%%%..%%%%%..#..m..#',
+  '#.....#................#.....#',
+  '###D###....m......a....###D###',
+  '#....................b.......#',
+  '#..y..####!######!####...m...#',
+  '#.....#..............#.......#',
+  '#..m..D....a....v....D...u...#',
+  '#.....#..............#.......#',
+  '####################B#########',
+  '#..h..............#......Q..#',
+  '#..c...m....t.....D..........#',
+  '#..................#.....EE..#',
+  '##############################',
+  ]},
+{ name:'LEVEL 3 · LEGACY SYSTEM DUNGEON', boss:null, weaponGift:2,
+  intro:['The basement. Servers from 1994 hum','an ancient song of technical debt.','Two keycards guard the way out.','Beware the EXCEL NECROMANCER.'],
+  th:{ wallA:['#3a3f46','#25292f'], wallB:['#5a3d28','#3f2a1b'], glass:['#1d3a2a','#122619'],
+       floor:'#23272d', floorD:'#131619', ceil:'#15181c', ceilD:'#0a0c0e', fog:'#050608' },
+  map:[
+  '##############################',
+  '#P...#....l.......#....c...h.#',
+  '#....D............D..........#',
+  '#..c.#...m....x...#...v...m..#',
+  '#....#............#####D######',
+  '#.W..######D#######......t...#',
+  '######............#..f.......#',
+  '#....#..l....v....#......x...#',
+  '#.h..D............###R########',
+  '#....#....m...t.r.#.....l....#',
+  '######............#..........#',
+  '#..x.....!........#..........#',
+  '#........#........##########D#',
+  '#..v..m..#...x....#..g.#.....#',
+  '####D#####........#....#..l..#',
+  '#........####D#####....D.....#',
+  '#..c..l...........#....#..m..#',
+  '#.........m....v..#######G####',
+  '#..t..............#.....l....#',
+  '#..h.....x........#........u.#',
+  '#######################E######',
+  '##############################',
+  ]},
+{ name:'LEVEL 4 · FACTORY LABYRINTH', boss:'mob', weaponGift:3,
+  intro:['The production hall. Robots build cars,','bureaucrats build obstacles.','The MASTER OF BUREAUCRACY has filed','your escape under \'pending\'. Unfile it.'],
+  th:{ wallA:['#5c646e','#41474f'], wallB:['#c99a1e','#8f6c12'], glass:['#4a3a1a','#332711'],
+       floor:'#33383f','floorD':'#1c2025', ceil:'#22262b', ceilD:'#121518', fog:'#08090b' },
+  map:[
+  '################################',
+  '#P....#....m.....l....#...c..h.#',
+  '#.....D...............D........#',
+  '#..c..#..%%%%%..%%%%%..#..t..m.#',
+  '#.....#..%...%..%...%..#.......#',
+  '#..W..#..%.a.D..D.v.%..#####D###',
+  '#######..%...%..%...%..#....a..#',
+  '#..t..#..%%%%%..%%%%%..D...f...#',
+  '#.....D................#.....x.#',
+  '#..l..#....m......v....#########',
+  '#.....#................#....l..#',
+  '###D#######!####!#######.......#',
+  '#.........#........#...D...b...#',
+  '#..y...v..D...c....D...#.......#',
+  '#.........#...h....#...##B######',
+  '####%%%####........#...#....g..#',
+  '#.........#..m..x..#...D.......#',
+  '#..a...m..#........#...#..t....#',
+  '#.........############.#####G###',
+  '#....u..t.............D...m....#',
+  '######D#####..x...l...#........#',
+  '#..h.......#..........#...Q....#',
+  '#..c...v...#....t.....#........#',
+  '#..........#..........#...EE...#',
+  '################################',
+  ]},
+{ name:'LEVEL 5 · BOARDROOM OF DOOM', boss:'inf', weaponGift:4,
+  intro:['The top floor. Mahogany. Golf trophies.','THE INFINITE PROCESS lives here —','the loop that approves its own approvals.','Collect ALL 3 keycards. End it. Go home.'],
+  th:{ wallA:['#5a3d28','#3d2919'], wallB:['#c99a1e','#8f6c12'], glass:['#1d3a4a','#122633'],
+       floor:'#3a2e22','floorD':'#211a13', ceil:'#241d15', ceilD:'#120e0a', fog:'#070503' },
+  map:[
+  '##############################',
+  '#P....#...a...#....x...#..c..#',
+  '#.....D.......D........D..h..#',
+  '#..c..#...v...#..l.....#..f..#',
+  '#..h..#####=######=#####..m..#',
+  '#.....#....m......a....#######',
+  '#..W..D................D...t.#',
+  '###D###...x........v...#..r..#',
+  '#..t..#................#######',
+  '#..a..#####R######B#####...l.#',
+  '#.....#..!..........!..D.....#',
+  '###D###................#..u..#',
+  '#.....#..l...mm...l....#######',
+  '#..b..#................#..a..#',
+  '#.....#####........#####.....#',
+  '#..y..#................D..v..#',
+  '#######....v...a.......#..p..#',
+  '#..x..D................#######',
+  '#..m..#####G######G#####..h..#',
+  '#.....#................D..c..#',
+  '#..g..#.......Q........#..m..#',
+  '###E###................#######',
+  '#.....#....!......!....#.....#',
+  '##############################',
+  ]},
+];
+
+/* ===================== STATE ===================== */
+let state='title', tick=0;
+let grid=[], MW=0, MH=0, doors=[], ents=[], items=[], projs=[], particles=[];
+let cam={x:2,y:2,a:0};
+let player=null;
+let levelIdx=0, TH=null, TEX={}, floorCan=null;
+let kills=0, totalEnemies=0, levelTicks=0, itemsGot=0, itemsTotal=0;
+let toasts=[], jokeTimer=500, hurtFlash=0, pickFlash=0, weaponToast=0;
+let pauseSel=0, interData=null, snap=null, beam=null, shake=0;
+let best=+localStorage.getItem('sko_doom_best')||0;
+let winFlag=false, bossSeen=false;
+
+function newPlayer(){
+  return { x:2,y:2, hp:100, coffee:50, keys:{r:false,b:false,g:false},
+    weapons:[true,false,false,false,false], wi:0, cd:0, bob:0, moving:false,
+    fx:{fast:0,vpn:0,boost:0,friday:0} };
+}
+
+/* ---- mapa: grid kódy — 0 volno · 1-4 zdi · 9 exit · -(i+1) dveře ---- */
+function loadLevel(i,attract){
+  levelIdx=i;
+  const L=LEVELS[i]; TH=L.th;
+  const rows=L.map;
+  MW=Math.max(...rows.map(r=>r.length)); MH=rows.length;
+  grid=new Array(MW*MH).fill(0);
+  doors=[]; ents=[]; items=[]; projs=[]; particles=[]; toasts=[]; beam=null;
+  kills=0; totalEnemies=0; levelTicks=0; itemsGot=0; itemsTotal=0; bossSeen=false;
+  jokeTimer=420+Math.random()*300;
+  let sx=1.5, sy=1.5;
+  for(let y=0;y<MH;y++){
+    const row=rows[y].padEnd(MW,'#');
+    for(let x=0;x<MW;x++){
+      const ch=row[x], id=y*MW+x;
+      if(ch==='#') grid[id]=1;
+      else if(ch==='%') grid[id]=2;
+      else if(ch==='=') grid[id]=3;
+      else if(ch==='!') grid[id]=4;
+      else if(ch==='E') grid[id]=9;
+      else if(ch==='D'||ch==='R'||ch==='B'||ch==='G'){
+        const lock = ch==='R'?'r':ch==='B'?'b':ch==='G'?'g':null;
+        doors.push({x,y,open:0,opening:false,lock});
+        grid[id]=-doors.length;
+      }
+      else if(ch==='P'){ sx=x+0.5; sy=y+0.5; }
+      else if(ETYPES[ch]){ spawnEnemy(ch,x+0.5,y+0.5); }
+      else if(ch==='Q' && L.boss){ spawnEnemy(L.boss,x+0.5,y+0.5); }
+      else if(ITEMS[ch]){ items.push({t:ch,x:x+0.5,y:y+0.5,got:false}); itemsTotal++; }
+    }
+  }
+  if(!player) player=newPlayer();
+  player.x=sx; player.y=sy;
+  player.fx={fast:0,vpn:0,boost:0,friday:0}; player.keys={r:false,b:false,g:false};
+  cam={x:sx,y:sy,a:0};
+  buildTextures(); buildFloor();
+  if(!attract){
+    snap=JSON.parse(JSON.stringify({score,hp:player.hp,coffee:player.coffee,weapons:player.weapons,wi:player.wi}));
+    toast(L.name,240,'#ffd23f');
+    L.intro.slice(0,1).forEach(s=>toast(s,220));
+  }
+}
+function spawnEnemy(t,x,y){
+  const d=ETYPES[t];
+  ents.push({t,x,y,hp:d.hp,cd:30+Math.random()*60,aware:false,dead:0,pain:0,
+    wdir:Math.random()*Math.PI*2,wt:0,sumCd:300,spiral:0});
+  totalEnemies++;
+}
+let score=0;
+
+function buildTextures(){
+  TEX={
+    1:panelTex(TH.wallA[0],TH.wallA[1]),
+    2:panelTex(TH.wallB[0],TH.wallB[1],TH.wallA[1]),
+    3:glassTex(TH.wallA[1],TH.glass[0]),
+    4:posterTex(TH.wallA[0],TH.wallA[1]),
+    9:exitTex(),
+    D:doorTex(null), R:doorTex('#e23d3d'), B:doorTex('#4da3ff'), G:doorTex('#ffd23f'),
+  };
+}
+function buildFloor(){
+  floorCan=document.createElement('canvas'); floorCan.width=W; floorCan.height=VIEW_H;
+  const g=floorCan.getContext('2d');
+  let gr=g.createLinearGradient(0,0,0,HORIZON);
+  gr.addColorStop(0,TH.ceil); gr.addColorStop(1,TH.ceilD);
+  g.fillStyle=gr; g.fillRect(0,0,W,HORIZON);
+  gr=g.createLinearGradient(0,VIEW_H,0,HORIZON);
+  gr.addColorStop(0,TH.floor); gr.addColorStop(1,TH.floorD);
+  g.fillStyle=gr; g.fillRect(0,HORIZON,W,HORIZON);
+  // pruhy stropních zářivek + odlesk na podlaze
+  for(let i=0;i<5;i++){
+    const yy=HORIZON-14-i*26, a=0.05-i*0.008;
+    g.fillStyle='rgba(255,255,230,'+Math.max(0.01,a)+')'; g.fillRect(0,yy,W,3);
+  }
+}
+
+/* ===================== MAP HELPERS ===================== */
+function cellAt(x,y){
+  const ix=x|0, iy=y|0;
+  if(ix<0||iy<0||ix>=MW||iy>=MH) return 1;
+  return grid[iy*MW+ix];
+}
+function solidAt(x,y){
+  const c=cellAt(x,y);
+  if(c>0) return true;
+  if(c<0) return doors[-c-1].open<0.75;
+  return false;
+}
+function tryMove(o,dx,dy,rad){
+  if(!solidAt(o.x+dx+Math.sign(dx)*rad, o.y-rad) && !solidAt(o.x+dx+Math.sign(dx)*rad, o.y+rad)) o.x+=dx;
+  if(!solidAt(o.x-rad, o.y+dy+Math.sign(dy)*rad) && !solidAt(o.x+rad, o.y+dy+Math.sign(dy)*rad)) o.y+=dy;
+}
+function los(x0,y0,x1,y1){
+  const dx=x1-x0, dy=y1-y0, d=Math.hypot(dx,dy), n=Math.ceil(d/0.15);
+  for(let i=1;i<n;i++){ const t=i/n; if(solidAt(x0+dx*t,y0+dy*t)) return false; }
+  return true;
+}
+
+/* ===================== TOASTS & JOKES ===================== */
+function toast(text,dur,col){ toasts.push({text,timer:dur||210,col:col||'#c9ffe2'}); if(toasts.length>3) toasts.shift(); SFX.blip&&actx&&SFX.blip(); }
+
+/* ===================== GAME FLOW ===================== */
+function startGame(){
+  score=0; player=newPlayer(); winFlag=false;
+  loadLevel(0,false);
+  state='play'; startMusic(); grabPointer();
+}
+function pauseGame(){ if(state!=='play') return; state='pause'; pauseSel=0; }
+function resumeGame(){ state='play'; grabPointer(); }
+function restartLevel(){
+  score=snap.score; player.hp=snap.hp; player.coffee=snap.coffee;
+  player.weapons=snap.weapons.slice(); player.wi=snap.wi;
+  player.fx={fast:0,vpn:0,boost:0,friday:0}; player.keys={r:false,b:false,g:false};
+  loadLevel(levelIdx,false); state='play'; grabPointer();
+}
+function levelClear(){
+  const secs=Math.floor(levelTicks/60);
+  const timeBonus=Math.max(0, 400-secs*2);
+  const killBonus=(kills===totalEnemies)?300:0;
+  const bonus=500+timeBonus+killBonus;
+  score+=bonus;
+  interData={secs,timeBonus,killBonus,bonus,kills,totalEnemies,itemsGot,itemsTotal};
+  SFX.fanfare();
+  if(document.pointerLockElement) document.exitPointerLock();
+  if(levelIdx>=LEVELS.length-1){ winFlag=true; endGame(); }
+  else state='inter';
+}
+function nextLevel(){ loadLevel(levelIdx+1,false); state='play'; grabPointer(); }
+function endGame(){
+  if(score>best){ best=score; localStorage.setItem('sko_doom_best',best); }
+  stopMusic();
+  if(document.pointerLockElement) document.exitPointerLock();
+  state = winFlag ? 'win' : 'over';
+}
+function backToTitle(){
+  confetti=null; winFlag=false; stopMusic();
+  loadLevel(0,true); cam.a=0.6; state='title';
+}
+
+/* ===================== WEAPONS ===================== */
+function switchWeapon(i){
+  if(state!=='play'||!player.weapons[i]||player.wi===i) return;
+  player.wi=i; player.cd=Math.max(player.cd,8); weaponToast=90; SFX.blip();
+}
+function cycleWeapon(dir){
+  let i=player.wi;
+  for(let k=0;k<5;k++){ i=(i+dir+5)%5; if(player.weapons[i]){ switchWeapon(i); return; } }
+}
+function fireWeapon(){
+  const wp=WEAPONS[player.wi];
+  if(player.cd>0) return;
+  if(player.coffee<wp.cost){ toast('OUT OF COFFEE! FIND A REFILL ☕',150,'#ff8c3a'); SFX.denied(); player.cd=30; return; }
+  player.coffee-=wp.cost;
+  player.cd=Math.ceil(wp.cd*(player.fx.fast>0?0.5:1));
+  const dmg=wp.dmg*(player.fx.boost>0?2:1);
+  SFX['shoot'+player.wi]();
+  shake=Math.min(8,shake+ (player.wi===1||player.wi===3?5:2));
+  if(wp.hitscan){ fireHitscan(wp,dmg); return; }
+  const n=wp.pellets||1;
+  for(let k=0;k<n;k++){
+    const sp=wp.spread? (k/(n-1)-0.5)*wp.spread : 0;
+    const a=cam.a+sp+(wp.pellets?(Math.random()-0.5)*0.03:0);
+    projs.push({x:player.x+Math.cos(a)*0.3, y:player.y+Math.sin(a)*0.3,
+      dx:Math.cos(a)*wp.spd, dy:Math.sin(a)*wp.spd, dmg, side:0, art:'w'+player.wi,
+      size:wp.size, splash:wp.splash||0, life:400});
+  }
+}
+function fireHitscan(wp,dmg){
+  // AI Copilot: lehký auto-aim v kuželu
+  let bestE=null, bestD=1e9;
+  for(const e of ents){
+    if(e.dead) continue;
+    const dx=e.x-player.x, dy=e.y-player.y, d=Math.hypot(dx,dy);
+    if(d>14) continue;
+    let da=Math.atan2(dy,dx)-cam.a;
+    while(da>Math.PI)da-=2*Math.PI; while(da<-Math.PI)da+=2*Math.PI;
+    if(Math.abs(da)<0.14 && d<bestD && los(player.x,player.y,e.x,e.y)){ bestE=e; bestD=d; }
+  }
+  beam={t:8,target:bestE};
+  if(bestE){ damageEnemy(bestE,dmg); }
+}
+function damageEnemy(e,dmg){
+  e.hp-=dmg; e.pain=ETYPES[e.t].boss?3:8; e.aware=true;
+  SFX.hit();
+  screenBurst(W/2+(Math.random()-0.5)*60, HORIZON+(Math.random()-0.5)*40, '#e9e4d4', 5);
+  if(e.hp<=0 && !e.dead){
+    e.dead=1;
+    const d=ETYPES[e.t];
+    score+=d.score; kills++;
+    SFX.kill();
+    if(Math.random()<0.35) toast(KILL_JOKES[(Math.random()*KILL_JOKES.length)|0],150,'#39ff8c');
+    if(d.boss) toast(d.name+' DEFEATED! ESCALATION APPROVED!',300,'#ffd23f');
+  }
+}
+
+/* ===================== INTERACTION (Space) ===================== */
+function interact(){
+  for(let t=0.4;t<=1.7;t+=0.22){
+    const x=cam.x+Math.cos(cam.a)*t, y=cam.y+Math.sin(cam.a)*t;
+    const c=cellAt(x,y);
+    if(c===9){ tryExit(); return; }
+    if(c<0){
+      const d=doors[-c-1];
+      if(d.open>=1) continue;
+      if(d.lock && !player.keys[d.lock]){
+        const col=d.lock==='r'?'RED':d.lock==='b'?'BLUE':'GOLD';
+        toast('ACCESS DENIED — NEED '+col+' KEYCARD',180,'#ff5d5d'); SFX.denied();
+      } else if(!d.opening){ d.opening=true; SFX.door(); }
+      return;
+    }
+    if(c>0) { return; }
+  }
+}
+function tryExit(){
+  const L=LEVELS[levelIdx];
+  if(L.boss && ents.some(e=>!e.dead && ETYPES[e.t].boss)){
+    toast('THE BOSS STILL BLOCKS YOUR ESCALATION!',200,'#ff5d5d'); SFX.denied(); return;
+  }
+  if(levelIdx===4 && !(player.keys.r&&player.keys.b&&player.keys.g)){
+    toast('ELEVATOR NEEDS ALL 3 KEYCARDS!',200,'#ff5d5d'); SFX.denied(); return;
+  }
+  levelClear();
+}
+
+/* ===================== UPDATE ===================== */
+function update(){
+  tick++;
+  if(state==='title'){ cam.a+=0.003; return; }
+  if(state==='pause'){ updatePause(); return; }
+  if(state==='inter'){ if(consume('use')||consume('fire')) nextLevel(); return; }
+  if(state==='over'||state==='win'){ if(consume('use')||consume('fire')||consume('pause')) backToTitle(); return; }
+
+  /* ----- PLAY ----- */
+  levelTicks++;
+  if(consume('pause')){ pauseGame(); return; }
+  if(consume('mute')){ muted=!muted; toast(muted?'SOUND OFF':'SOUND ON',90); }
+  if(consume('use')) interact();
+
+  const p=player;
+  for(const k in p.fx) if(p.fx[k]>0) p.fx[k]--;
+  if(p.cd>0) p.cd--;
+  if(hurtFlash>0) hurtFlash--;
+  if(pickFlash>0) pickFlash--;
+  if(weaponToast>0) weaponToast--;
+  if(shake>0) shake*=0.85;
+  if(beam){ beam.t--; if(beam.t<=0) beam=null; }
+
+  // pohyb
+  const spd=0.062;
+  let mx=0,my=0;
+  if(action.fwd){ mx+=Math.cos(cam.a); my+=Math.sin(cam.a); }
+  if(action.back){ mx-=Math.cos(cam.a); my-=Math.sin(cam.a); }
+  if(action.left){ mx+=Math.sin(cam.a); my-=Math.cos(cam.a); }
+  if(action.right){ mx-=Math.sin(cam.a); my+=Math.cos(cam.a); }
+  const ml=Math.hypot(mx,my);
+  p.moving=ml>0;
+  if(ml>0){ mx=mx/ml*spd; my=my/ml*spd; tryMove(p,mx,my,0.22); p.bob+=0.24; }
+  if(action.turnL) cam.a-=0.045;
+  if(action.turnR) cam.a+=0.045;
+  cam.x=p.x; cam.y=p.y;
+
+  if(mouseDown||action.fire) fireWeapon();
+
+  // dveře
+  for(const d of doors){ if(d.opening && d.open<1) d.open=Math.min(1,d.open+0.03); }
+
+  // itemy
+  for(const it of items){
+    if(it.got) continue;
+    if(Math.hypot(it.x-p.x,it.y-p.y)<0.55){ it.got=true; itemsGot++; pickupItem(it); }
+  }
+
+  // projektily
+  for(const pr of projs){
+    pr.x+=pr.dx; pr.y+=pr.dy; pr.life--;
+    if(solidAt(pr.x,pr.y)||pr.life<=0){ if(pr.splash) splash(pr); pr.dead=true; continue; }
+    if(pr.side===0){
+      for(const e of ents){
+        if(e.dead) continue;
+        if(Math.hypot(e.x-pr.x,e.y-pr.y)<0.45){
+          if(pr.splash) splash(pr); else damageEnemy(e,pr.dmg);
+          pr.dead=true; break;
+        }
+      }
+    } else {
+      if(Math.hypot(p.x-pr.x,p.y-pr.y)<0.35){ hurtPlayer(pr.dmg); pr.dead=true; }
+    }
+  }
+  projs=projs.filter(pr=>!pr.dead);
+
+  // nepřátelé
+  updateEnemies();
+
+  // částice (screen-space)
+  for(const pa of particles){ pa.x+=pa.vx; pa.y+=pa.vy; pa.vy+=0.25; pa.life-=0.04; }
+  particles=particles.filter(pa=>pa.life>0);
+
+  // náhodné korporátní hlášky
+  if(--jokeTimer<=0){ jokeTimer=560+Math.random()*420; toast('📢 '+JOKES[(Math.random()*JOKES.length)|0],260,'#a9c4ba'); }
+}
+
+function splash(pr){
+  screenBurst(W/2,HORIZON,'#b06a2c',14);
+  for(const e of ents){ if(!e.dead && Math.hypot(e.x-pr.x,e.y-pr.y)<pr.splash) damageEnemy(e,pr.dmg); }
+  SFX.hit();
+}
+function pickupItem(it){
+  const def=ITEMS[it.t], p=player;
+  score+=25; pickFlash=14;
+  if(it.t==='c'){ p.coffee=Math.min(100,p.coffee+35); SFX.pickup(); }
+  else if(it.t==='h'){ p.hp=Math.min(100,p.hp+25); SFX.pickup(); }
+  else if(it.t==='f'){ p.fx.fast=600; SFX.powerup(); }
+  else if(it.t==='u'){ p.fx.vpn=480; SFX.powerup(); }
+  else if(it.t==='p'){ p.fx.boost=600; SFX.powerup(); }
+  else if(it.t==='y'){ p.fx.friday=600; SFX.powerup(); }
+  else if(def.key){ p.keys[def.key]=true; SFX.key(); }
+  else if(it.t==='W'){
+    const gi=LEVELS[levelIdx].weaponGift;
+    if(gi!=null && !p.weapons[gi]){ p.weapons[gi]=true; p.wi=gi; weaponToast=120;
+      toast('NEW WEAPON: '+WEAPONS[gi].name+'!',220,'#ffd23f'); SFX.powerup(); }
+    else { p.coffee=Math.min(100,p.coffee+30); toast('SPARE PARTS → +30 COFFEE',150); SFX.pickup(); }
+    return;
+  }
+  toast(def.msg,170,'#ffd23f');
+  if(def.joke && Math.random()<0.6) toast(def.joke,220,'#a9c4ba');
+}
+function hurtPlayer(dmg){
+  if(player.fx.vpn>0){ toast('VPN ABSORBED THE DAMAGE',80,'#4da3ff'); return; }
+  player.hp-=dmg; hurtFlash=22; shake=Math.min(10,shake+4); SFX.hurt();
+  if(player.hp<=0){ player.hp=0; endGame(); }
+}
+
+function updateEnemies(){
+  const p=player, slow=p.fx.friday>0?0.35:1;
+  for(const e of ents){
+    const d=ETYPES[e.t];
+    if(e.dead){ e.dead++; continue; }
+    if(e.pain>0){ e.pain--; continue; }
+    const dx=p.x-e.x, dy=p.y-e.y, dist=Math.hypot(dx,dy);
+    const seen=dist<11 && los(e.x,e.y,p.x,p.y);
+    if(seen) e.aware=true;
+    if(d.boss && seen && !bossSeen){ bossSeen=true; SFX.boss(); toast('⚠ '+d.name+' HAS ENTERED THE CHAT',280,'#ff5d5d'); }
+    if(e.cd>0) e.cd-=slow;
+
+    if(e.aware){
+      // pohyb k hráči (ranged si drží odstup)
+      const keep=d.shoot?2.4:0.55;
+      if(dist>keep){
+        const s=d.spd*slow, nx=dx/dist*s, ny=dy/dist*s;
+        const ox=e.x, oy=e.y;
+        tryMove(e,nx,ny,0.3);
+        if(Math.abs(e.x-ox)<s*0.3 && Math.abs(e.y-oy)<s*0.3){
+          // zaseklý — zkus klouzat kolmo
+          tryMove(e,-ny,nx,0.3);
+        }
+      }
+      // útok
+      if(d.melee && dist<0.85 && e.cd<=0){ hurtPlayer(d.melee); e.cd=55; }
+      if(d.shoot && seen && dist<10 && e.cd<=0){
+        e.cd=d.shoot.cd+Math.random()*30;
+        if(d.radial){
+          e.spiral+=0.7;
+          for(let k=0;k<d.radial;k++){
+            const a=e.spiral+k*Math.PI*2/d.radial;
+            enemyShot(e,a,d.shoot);
+          }
+        } else {
+          const base=Math.atan2(dy,dx), n=d.shoot.n||1, sp=d.shoot.spread||0.15;
+          for(let k=0;k<n;k++) enemyShot(e, base+(n>1?(k/(n-1)-0.5)*sp:0), d.shoot);
+        }
+      }
+      if(d.summon){ e.sumCd--; if(e.sumCd<=0 && ents.filter(q=>!q.dead&&q.t===d.summon).length<4){
+        e.sumCd=340; spawnEnemy(d.summon, e.x+(Math.random()-0.5), e.y+(Math.random()-0.5));
+        toast('AN UNPAID INTERN HAS BEEN SUMMONED!',150,'#e0b64f'); } }
+    } else {
+      // bloumání po kanclu
+      e.wt--; if(e.wt<=0){ e.wt=60+Math.random()*120; e.wdir=Math.random()*Math.PI*2; }
+      tryMove(e,Math.cos(e.wdir)*d.spd*0.4*slow, Math.sin(e.wdir)*d.spd*0.4*slow, 0.3);
+    }
+  }
+  // mrtvoly po animaci pryč
+  ents=ents.filter(e=>!e.dead||e.dead<26);
+  // jemné odstrkávání, ať se neslepí
+  for(let i=0;i<ents.length;i++) for(let j=i+1;j<ents.length;j++){
+    const a=ents[i],b=ents[j]; if(a.dead||b.dead) continue;
+    const dx=b.x-a.x, dy=b.y-a.y, d2=dx*dx+dy*dy;
+    if(d2<0.25&&d2>0.0001){ const d=Math.sqrt(d2), push=(0.5-d)*0.5, nx=dx/d*push, ny=dy/d*push;
+      a.x-=nx; a.y-=ny; b.x+=nx; b.y+=ny; }
+  }
+}
+function enemyShot(e,a,sh){
+  projs.push({x:e.x+Math.cos(a)*0.4, y:e.y+Math.sin(a)*0.4,
+    dx:Math.cos(a)*sh.spd, dy:Math.sin(a)*sh.spd, dmg:sh.dmg, side:1,
+    art:'e', color:sh.color, size:0.2, life:500});
+}
+function screenBurst(x,y,col,n){
+  for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2, sp=1+Math.random()*3;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,life:1,col}); }
+}
+
+/* ----- PAUSE MENU ----- */
+const PAUSE_ITEMS=['RESUME','RESTART LEVEL','SOUND: ','QUIT TO ARCADE MENU'];
+function updatePause(){
+  if(consume('fwd')) pauseSel=(pauseSel+3)%4;
+  if(consume('back')) pauseSel=(pauseSel+1)%4;
+  if(consume('pause')) { resumeGame(); return; }
+  if(consume('use')||consume('fire')) pauseAction(pauseSel);
+}
+function pauseAction(i){
+  if(i===0) resumeGame();
+  else if(i===1) restartLevel();
+  else if(i===2){ muted=!muted; }
+  else if(i===3){ stopMusic(); location.href='../index.html'; }
+}
+canvas.addEventListener('mousemove',e=>{
+  if(state!=='pause') return;
+  const r=canvas.getBoundingClientRect();
+  const y=(e.clientY-r.top)*H/r.height;
+  const i=Math.floor((y-250)/52);
+  if(i>=0&&i<4) pauseSel=i;
+});
+canvas.addEventListener('mousedown',e=>{
+  if(state==='pause'){
+    const r=canvas.getBoundingClientRect();
+    const y=(e.clientY-r.top)*H/r.height;
+    const i=Math.floor((y-250)/52);
+    if(i>=0&&i<4) pauseAction(i);
+  }
+});
+
+/* ===================== RAYCASTER RENDER ===================== */
+const zbuf=new Float32Array(NUMRAYS);
+const spTmp=document.createElement('canvas'); const spg=spTmp.getContext('2d');
+function renderWorld(){
+  const sx=(Math.random()-0.5)*shake, sy=(Math.random()-0.5)*shake;
+  ctx.save(); ctx.translate(sx,sy);
+  ctx.drawImage(floorCan,0,0);
+  const dirX=Math.cos(cam.a), dirY=Math.sin(cam.a);
+  const plX=-dirY*0.66, plY=dirX*0.66;
+
+  for(let i=0;i<NUMRAYS;i++){
+    const camX=2*i/NUMRAYS-1;
+    const rdx=dirX+plX*camX, rdy=dirY+plY*camX;
+    let mapX=cam.x|0, mapY=cam.y|0;
+    const ddx=Math.abs(1/(rdx||1e-9)), ddy=Math.abs(1/(rdy||1e-9));
+    let stepX,stepY,sdx,sdy;
+    if(rdx<0){ stepX=-1; sdx=(cam.x-mapX)*ddx; } else { stepX=1; sdx=(mapX+1-cam.x)*ddx; }
+    if(rdy<0){ stepY=-1; sdy=(cam.y-mapY)*ddy; } else { stepY=1; sdy=(mapY+1-cam.y)*ddy; }
+    let side=0, hit=0, tex=null, texX=0, dist=0, guard=0;
+    while(!hit && guard++<80){
+      if(sdx<sdy){ sdx+=ddx; mapX+=stepX; side=0; } else { sdy+=ddy; mapY+=stepY; side=1; }
+      if(mapX<0||mapY<0||mapX>=MW||mapY>=MH){ hit=1; tex=TEX[1]; dist=side?sdy-ddy:sdx-ddx; texX=0; break; }
+      const c=grid[mapY*MW+mapX];
+      if(c===0) continue;
+      dist = side ? sdy-ddy : sdx-ddx;
+      let wallX = side ? cam.x+dist*rdx : cam.y+dist*rdy;
+      wallX-=Math.floor(wallX);
+      if(c<0){
+        const d=doors[-c-1];
+        if(wallX < d.open) continue;      // dveře odjíždí do zdi
+        tex=TEX[d.lock ? d.lock.toUpperCase() : 'D'];
+        texX=wallX-d.open; hit=1;
+      } else {
+        tex=TEX[c]||TEX[1]; texX=wallX; hit=1;
+      }
+    }
+    if(dist<0.01) dist=0.01;
+    zbuf[i]=dist;
+    const h=VIEW_H/dist;
+    const y0=HORIZON-h/2;
+    const tx=Math.min(TS-1,(texX*TS)|0);
+    ctx.drawImage(tex,tx,0,1,TS, i*COLW, y0, COLW, h);
+    // stínování vzdáleností + tmavší boční stěny
+    const sh=Math.min(0.78, dist/13 + (side?0.14:0));
+    if(sh>0.03){ ctx.fillStyle='rgba(0,0,0,'+sh.toFixed(2)+')'; ctx.fillRect(i*COLW,y0,COLW,h); }
+  }
+
+  renderSprites(dirX,dirY,plX,plY);
+  if(beam) renderBeam();
+  ctx.restore();
+}
+
+function renderSprites(dirX,dirY,plX,plY){
+  const list=[];
+  const invDet=1/(plX*dirY - dirX*plY);
+  function push(x,y,cv,wscale,voff,alpha,squash){
+    const rx=x-cam.x, ry=y-cam.y;
+    const trX=invDet*(dirY*rx - dirX*ry);
+    const trY=invDet*(-plY*rx + plX*ry);
+    if(trY<=0.08) return;
+    list.push({trX,trY,cv,wscale,voff,alpha:alpha==null?1:alpha,squash:squash||0});
+  }
+  for(const it of items){ if(!it.got){
+    const bob=Math.sin((tick+it.x*31)/16)*0.02;
+    push(it.x,it.y,ART[ITEMS[it.t].art],0.34,0.02+bob,1);
+  }}
+  for(const e of ents){
+    const d=ETYPES[e.t];
+    let alpha=1, squash=0;
+    if(d.ghost) alpha=0.55+0.25*Math.sin(tick/5);
+    if(e.dead){ alpha=1-e.dead/26; squash=e.dead/26; }
+    else if(e.pain>0 && (tick&2)) alpha=0.55;
+    push(e.x,e.y,ART[d.art],d.scale,0,alpha,squash);
+  }
+  for(const pr of projs){ push(pr.x,pr.y,PROJ_ART[pr.art]||PROJ_ART.e,pr.size,0.28,1); }
+
+  list.sort((a,b)=>b.trY-a.trY);
+  for(const s of list){
+    const screenX=(W/2)*(1+s.trX/s.trY);
+    const unit=VIEW_H/s.trY;
+    let hgt=unit*s.wscale*(1-s.squash*0.8);
+    const wdt=hgt*(s.cv.width/s.cv.height);
+    const floorY=HORIZON+unit*0.5;
+    const top=floorY-hgt-unit*s.voff;
+    const x0=screenX-wdt/2;
+    if(x0>W||x0+wdt<0) continue;
+    // stín vzdálenosti nanést jen na pixely spritu (ne na pozadí za ním)
+    const shd=Math.min(0.7,s.trY/13);
+    let src=s.cv;
+    if(shd>0.04){
+      spTmp.width=s.cv.width; spTmp.height=s.cv.height;
+      spg.drawImage(s.cv,0,0);
+      spg.globalCompositeOperation='source-atop';
+      spg.fillStyle='rgba(0,0,0,'+shd.toFixed(2)+')'; spg.fillRect(0,0,spTmp.width,spTmp.height);
+      spg.globalCompositeOperation='source-over';
+      src=spTmp;
+    }
+    ctx.globalAlpha=s.alpha;
+    // sloupcové kreslení proti z-bufferu
+    const c0=Math.max(0,Math.floor(x0/COLW)), c1=Math.min(NUMRAYS-1,Math.ceil((x0+wdt)/COLW));
+    for(let c=c0;c<=c1;c++){
+      if(zbuf[c]<=s.trY) continue;
+      const px=c*COLW;
+      const u=(px-x0)/wdt;
+      const sx=Math.max(0,Math.min(src.width-1,(u*src.width)|0));
+      ctx.drawImage(src,sx,0,1,src.height, px,top,COLW,hgt);
+    }
+    ctx.globalAlpha=1;
+  }
+}
+function renderBeam(){
+  // paprsek AI Copilota — od zbraně ke středu / cíli
+  const t=beam.t/8;
+  ctx.save();
+  ctx.strokeStyle='rgba(201,160,255,'+(0.7*t)+')';
+  ctx.lineWidth=4+6*t;
+  ctx.beginPath();
+  ctx.moveTo(W/2+90, VIEW_H-40);
+  ctx.lineTo(W/2+(Math.random()-0.5)*6, HORIZON+(Math.random()-0.5)*6);
+  ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,'+(0.8*t)+')'; ctx.lineWidth=2;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* ===================== FIRST-PERSON WEAPON ===================== */
+function drawWeapon(){
+  const p=player, wp=WEAPONS[p.wi];
+  const bobX=Math.sin(p.bob)*10*(p.moving?1:0.2), bobY=Math.abs(Math.cos(p.bob))*7*(p.moving?1:0.2);
+  const rec=p.cd>wp.cd-6 ? (p.cd-(wp.cd-6))*3 : 0;
+  const gx=W/2+bobX, gy=VIEW_H+bobY+rec;
+  ctx.save(); ctx.translate(gx,gy);
+  const flash=p.cd>wp.cd-4;
+  if(flash){ // záblesk
+    ctx.fillStyle='rgba(255,240,160,0.9)';
+    ctx.beginPath(); ctx.arc(40,-98,16+Math.random()*8,0,7); ctx.fill();
+  }
+  if(p.wi===0){ // PowerPoint Launcher — projektor se slajdy
+    ctx.fillStyle='#3b3f46'; ctx.fillRect(-10,-70,100,54);
+    ctx.fillStyle='#23262b'; ctx.fillRect(-10,-70,100,10);
+    ctx.fillStyle='#ff8c3a'; ctx.fillRect(70,-58,26,22);
+    ctx.fillStyle='#fff'; ctx.fillRect(4,-56,44,30);
+    ctx.fillStyle='#d04423'; ctx.fillRect(4,-56,44,8);
+    ctx.fillStyle='#888'; ctx.font='6px PixelArcade'; ctx.fillText('SLIDE',8,-36);
+    ctx.fillText('1/348',8,-28);
+  } else if(p.wi===1){ // Excel Cannon — zelené dělo s mřížkou
+    ctx.fillStyle='#1e7a45'; ctx.fillRect(-16,-78,110,62);
+    ctx.strokeStyle='#0b3a20'; ctx.lineWidth=2;
+    for(let x=-16;x<=94;x+=22){ ctx.beginPath(); ctx.moveTo(x,-78); ctx.lineTo(x,-16); ctx.stroke(); }
+    for(let y=-78;y<=-16;y+=15){ ctx.beginPath(); ctx.moveTo(-16,y); ctx.lineTo(94,y); ctx.stroke(); }
+    ctx.fillStyle='#0b3a20'; ctx.fillRect(78,-66,30,34);
+    ctx.fillStyle='#d7ffe6'; ctx.font='8px PixelArcade'; ctx.fillText('#REF!',-6,-30);
+  } else if(p.wi===2){ // SAP Blaster — modrá krabice s kabely
+    ctx.fillStyle='#28527a'; ctx.fillRect(-8,-72,96,56);
+    ctx.fillStyle='#1a3853'; ctx.fillRect(-8,-72,96,12);
+    ctx.fillStyle='#4da3ff'; ctx.fillRect(70,-60,28,18);
+    ctx.fillStyle='#fff'; ctx.font='9px PixelArcade'; ctx.fillText('SAP',10,-46);
+    ctx.fillStyle='#e8ecf2'; ctx.font='6px PixelArcade'; ctx.fillText('LOADING...',10,-30);
+  } else if(p.wi===3){ // Coffee Boost Gun — konvice s tryskou
+    ctx.fillStyle='#6b4a2f'; ctx.fillRect(-6,-76,84,60);
+    ctx.fillStyle='#402b18'; ctx.fillRect(-6,-30,84,14);
+    ctx.fillStyle='#f2e6d8'; ctx.fillRect(8,-66,50,26);
+    ctx.fillStyle='#b06a2c'; ctx.fillRect(64,-62,32,20);
+    ctx.fillStyle='#402b18'; ctx.font='7px PixelArcade'; ctx.fillText('DBL SHOT',12,-50);
+    // pára
+    ctx.fillStyle='rgba(240,240,240,'+(0.2+0.1*Math.sin(tick/8))+')';
+    ctx.fillRect(20+Math.sin(tick/9)*4,-92,5,14);
+  } else { // AI Copilot Ray — futuristický zářič
+    ctx.fillStyle='#3b2a5e'; ctx.fillRect(-4,-74,92,58);
+    ctx.fillStyle='#c9a0ff'; ctx.fillRect(74,-64,26,26);
+    ctx.fillStyle='#150c26'; ctx.fillRect(6,-64,56,34);
+    ctx.fillStyle='#c9a0ff'; ctx.font='7px PixelArcade';
+    ctx.fillText('AI: '+(tick%90<45?'THINKING…':'SHIP IT'),10,-48);
+    ctx.fillStyle='rgba(201,160,255,'+(0.4+0.3*Math.sin(tick/6))+')';
+    ctx.fillRect(74,-64,26,26);
+  }
+  ctx.restore();
+  // zaměřovač
+  ctx.strokeStyle='rgba(255,255,255,0.8)'; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(W/2-9,HORIZON); ctx.lineTo(W/2-3,HORIZON);
+  ctx.moveTo(W/2+3,HORIZON); ctx.lineTo(W/2+9,HORIZON);
+  ctx.moveTo(W/2,HORIZON-9); ctx.lineTo(W/2,HORIZON-3);
+  ctx.moveTo(W/2,HORIZON+3); ctx.lineTo(W/2,HORIZON+9);
+  ctx.stroke();
+}
+
+/* ===================== HUD ===================== */
+function bevel(x,y,w,h){
+  ctx.fillStyle='#0a1a12'; ctx.fillRect(x,y,w,h);
+  ctx.strokeStyle='#1f4d38'; ctx.lineWidth=2; ctx.strokeRect(x+1,y+1,w-2,h-2);
+}
+function bar(x,y,w,h,frac,col,bg){
+  ctx.fillStyle=bg||'#132019'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle=col; ctx.fillRect(x,y,Math.max(0,Math.min(1,frac))*w,h);
+}
+function drawHUD(){
+  const p=player;
+  ctx.fillStyle='#07130c'; ctx.fillRect(0,VIEW_H,W,HUD_H);
+  ctx.strokeStyle='#1f9c5e'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,VIEW_H+1); ctx.lineTo(W,VIEW_H+1); ctx.stroke();
+  ctx.textBaseline='alphabetic';
+
+  // SCORE
+  bevel(8,VIEW_H+8,150,64);
+  ctx.fillStyle='#7e9a90'; ctx.font='8px PixelArcade'; ctx.textAlign='left';
+  ctx.fillText('SCORE',16,VIEW_H+24);
+  ctx.fillStyle='#ffd23f'; ctx.font='14px PixelArcade';
+  ctx.fillText(String(score).padStart(6,'0'),16,VIEW_H+44);
+  ctx.fillStyle='#3c5a52'; ctx.font='7px PixelArcade';
+  ctx.fillText('BEST '+String(Math.max(best,score)).padStart(6,'0'),16,VIEW_H+62);
+
+  // HEALTH
+  bevel(166,VIEW_H+8,170,64);
+  ctx.fillStyle='#7e9a90'; ctx.font='8px PixelArcade'; ctx.fillText('HEALTH',174,VIEW_H+24);
+  bar(174,VIEW_H+30,120,12, p.hp/100, p.hp>30?'#39ff8c':'#ff5d5d');
+  ctx.fillStyle='#fff'; ctx.font='11px PixelArcade'; ctx.fillText(p.hp+'%',174+126,VIEW_H+41);
+  // COFFEE
+  ctx.fillStyle='#7e9a90'; ctx.font='8px PixelArcade'; ctx.fillText('COFFEE',174,VIEW_H+56);
+  bar(230,VIEW_H+48,80,10, p.coffee/100, '#b06a2c');
+  ctx.fillStyle='#f2c179'; ctx.font='9px PixelArcade'; ctx.fillText(Math.ceil(p.coffee),316,VIEW_H+57);
+
+  // MASKOT uprostřed
+  bevel(344,VIEW_H+8,72,64);
+  if(headImg.complete && headImg.naturalWidth){
+    ctx.drawImage(headImg,352,VIEW_H+13,56,56);
+    if(hurtFlash>0){ ctx.fillStyle='rgba(255,40,40,'+(hurtFlash/40)+')'; ctx.fillRect(352,VIEW_H+13,56,56); }
+    if(pickFlash>0){ ctx.fillStyle='rgba(255,210,63,'+(pickFlash/40)+')'; ctx.fillRect(352,VIEW_H+13,56,56); }
+  }
+
+  // ZBRAŇ
+  bevel(424,VIEW_H+8,168,64);
+  ctx.fillStyle='#7e9a90'; ctx.font='8px PixelArcade'; ctx.fillText('WEAPON',432,VIEW_H+24);
+  const wp=WEAPONS[p.wi];
+  ctx.fillStyle='#c9ffe2'; ctx.font='7px PixelArcade';
+  ctx.fillText(wp.name,432,VIEW_H+40);
+  // sloty 1-5
+  for(let i=0;i<5;i++){
+    const x=432+i*26;
+    ctx.fillStyle= i===p.wi ? '#1f9c5e' : p.weapons[i] ? '#11331f' : '#0a120d';
+    ctx.fillRect(x,VIEW_H+48,22,16);
+    ctx.fillStyle= p.weapons[i] ? '#c9ffe2' : '#2a3c34';
+    ctx.font='9px PixelArcade'; ctx.fillText(String(i+1),x+7,VIEW_H+60);
+  }
+
+  // KEYCARDS
+  bevel(600,VIEW_H+8,84,64);
+  ctx.fillStyle='#7e9a90'; ctx.font='8px PixelArcade'; ctx.fillText('KEYS',608,VIEW_H+24);
+  [['r','#e23d3d'],['b','#4da3ff'],['g','#ffd23f']].forEach(([k,col],i)=>{
+    const x=608+i*24;
+    ctx.fillStyle=p.keys[k]?col:'#132019'; ctx.fillRect(x,VIEW_H+32,18,26);
+    ctx.strokeStyle=p.keys[k]?'#fff':'#1f4d38'; ctx.lineWidth=2; ctx.strokeRect(x,VIEW_H+32,18,26);
+  });
+
+  // PROGRESS
+  bevel(692,VIEW_H+8,100,64);
+  ctx.fillStyle='#7e9a90'; ctx.font='8px PixelArcade'; ctx.fillText('PROGRESS',700,VIEW_H+24);
+  const prog=totalEnemies? kills/totalEnemies : 1;
+  bar(700,VIEW_H+30,84,12, prog, '#39ff8c');
+  ctx.fillStyle='#c9ffe2'; ctx.font='9px PixelArcade';
+  ctx.fillText(kills+'/'+totalEnemies,700,VIEW_H+58);
+  ctx.fillStyle='#3c5a52'; ctx.font='7px PixelArcade';
+  ctx.fillText('L'+(levelIdx+1)+'/5',760,VIEW_H+58);
+
+  // aktivní power-upy nad HUDem
+  let fx=[], p2=player.fx;
+  if(p2.fast>0) fx.push(['FAST APPROVAL',p2.fast/600,'#2fae63']);
+  if(p2.vpn>0) fx.push(['UNLIMITED VPN',p2.vpn/480,'#4da3ff']);
+  if(p2.boost>0) fx.push(['PRODUCTIVITY 2X',p2.boost/600,'#e05c3a']);
+  if(p2.friday>0) fx.push(['FRIDAY MODE',p2.friday/600,'#ffd23f']);
+  fx.forEach(([n,f,c],i)=>{
+    const y=VIEW_H-24-i*20;
+    ctx.fillStyle='rgba(4,15,10,0.75)'; ctx.fillRect(W-180,y,172,16);
+    bar(W-178,y+11,168,3,f,c);
+    ctx.fillStyle=c; ctx.font='7px PixelArcade'; ctx.textAlign='left';
+    ctx.fillText(n,W-174,y+9);
+  });
+
+  // boss HP
+  const boss=ents.find(e=>!e.dead&&ETYPES[e.t].boss);
+  if(boss && bossSeen){
+    const d=ETYPES[boss.t];
+    ctx.fillStyle='rgba(10,4,4,0.8)'; ctx.fillRect(W/2-180,10,360,26);
+    bar(W/2-174,24,348,8, boss.hp/d.hp, '#ff5d5d','#2a0d0d');
+    ctx.fillStyle='#ff9d9d'; ctx.font='8px PixelArcade'; ctx.textAlign='center';
+    ctx.fillText(d.name,W/2,20);
+  }
+}
+
+function drawToasts(){
+  ctx.textAlign='left';
+  toasts=toasts.filter(t=>t.timer-->0);
+  toasts.forEach((t,i)=>{
+    const y=44+i*22;
+    const a=Math.min(1,t.timer/30);
+    ctx.globalAlpha=a;
+    ctx.fillStyle='rgba(4,15,10,0.78)';
+    ctx.font='8px PixelArcade';
+    const w=ctx.measureText(t.text).width+16;
+    ctx.fillRect(10,y-12,w,18);
+    ctx.fillStyle=t.col; ctx.fillText(t.text,18,y+1);
+    ctx.globalAlpha=1;
+  });
+}
+
+/* ===================== SCREENS ===================== */
+function dim(a){ ctx.fillStyle='rgba(3,8,6,'+a+')'; ctx.fillRect(0,0,W,H); }
+function center(t,y,col,size){ ctx.fillStyle=col; ctx.font=size+'px PixelArcade'; ctx.textAlign='center'; ctx.fillText(t,W/2,y); }
+
+function drawTitle(){
+  renderWorld();
+  ctx.fillStyle='rgba(3,8,6,0.72)'; ctx.fillRect(0,0,W,H);
+  // logo
+  ctx.save();
+  ctx.textAlign='center';
+  ctx.font='52px PixelArcade';
+  ctx.fillStyle='#3a0d0d'; ctx.fillText('ŠkoDOOM',W/2+5,145);
+  ctx.fillStyle='#ff5d5d'; ctx.fillText('ŠkoDOOM',W/2,140);
+  ctx.font='13px PixelArcade'; ctx.fillStyle='#39ff8c';
+  ctx.fillText('KNEE-DEEP IN THE PAPERWORK',W/2,175);
+  ctx.restore();
+  if(headImg.complete && headImg.naturalWidth) ctx.drawImage(headImg,W/2-35,196,70,70);
+  ctx.fillStyle='#bcd'; ctx.font='9px PixelArcade'; ctx.textAlign='center';
+  const story=['You are the last ŠkoPilot in the office.','The corridors crawl with meetings, approvals','and legacy systems. Shoot your way through','5 floors of corporate hell. Reach the exit. Go home.'];
+  story.forEach((s,i)=>ctx.fillText(s,W/2,296+i*20));
+  ctx.fillStyle='#8aa'; ctx.font='8px PixelArcade';
+  ctx.fillText('WASD = MOVE · MOUSE = AIM · CLICK = FIRE',W/2,400);
+  ctx.fillText('SPACE = OPEN DOORS / USE · 1-5 = WEAPONS · P/ESC = PAUSE',W/2,420);
+  if(Math.floor(tick/30)%2===0) center('CLICK TO START',470,'#ffff44',18);
+  ctx.fillStyle='#3c5a52'; ctx.font='9px PixelArcade';
+  ctx.fillText('BEST '+String(best).padStart(6,'0'),W/2,520);
+  ctx.fillStyle='#24514a'; ctx.font='7px PixelArcade';
+  ctx.fillText('© 2026 ŠKODA · ŠKOPILOT FAMILY',W/2,566);
+}
+
+function drawPause(){
+  renderWorld(); drawWeapon(); drawHUD();
+  dim(0.8);
+  center('PAUSED',180,'#39ff8c',30);
+  center('THE PROCESS WAITS FOR NO ONE',210,'#7e9a90',8);
+  PAUSE_ITEMS.forEach((it,i)=>{
+    const y=270+i*52, sel=i===pauseSel;
+    const label = i===2 ? it+(muted?'OFF':'ON') : it;
+    if(sel){ ctx.fillStyle='#0d3a33'; ctx.fillRect(W/2-220,y-24,440,40); }
+    ctx.fillStyle=sel?'#39ff8c':'#7e9a90'; ctx.font='13px PixelArcade'; ctx.textAlign='center';
+    ctx.fillText(label,W/2,y);
+  });
+  ctx.fillStyle='#3c5a52'; ctx.font='8px PixelArcade'; ctx.textAlign='center';
+  ctx.fillText('W/S + SPACE · OR CLICK',W/2,500);
+}
+
+function drawInter(){
+  dim(1);
+  const d=interData;
+  center('LEVEL CLEARED!',130,'#39ff8c',26);
+  center(LEVELS[levelIdx].name,166,'#7e9a90',9);
+  ctx.font='11px PixelArcade'; ctx.textAlign='left';
+  const rows=[
+    ['BLOCKERS REMOVED', d.kills+' / '+d.totalEnemies, d.killBonus?'+300 BONUS':''],
+    ['ITEMS COLLECTED', d.itemsGot+' / '+d.itemsTotal,''],
+    ['TIME', Math.floor(d.secs/60)+':'+String(d.secs%60).padStart(2,'0'), '+'+d.timeBonus],
+    ['CLEAR BONUS','+500',''],
+    ['TOTAL BONUS','+'+d.bonus,''],
+  ];
+  rows.forEach(([a,b,c],i)=>{
+    const y=230+i*36;
+    ctx.fillStyle='#7e9a90'; ctx.fillText(a,170,y);
+    ctx.fillStyle='#fff'; ctx.fillText(b,470,y);
+    ctx.fillStyle='#ffd23f'; ctx.fillText(c,600,y);
+  });
+  ctx.textAlign='center';
+  center('SCORE '+String(score).padStart(6,'0'),430,'#ffd23f',14);
+  const nl=LEVELS[levelIdx+1];
+  if(nl){
+    center('NEXT: '+nl.name,470,'#39ff8c',9);
+    nl.intro.forEach((s,i)=>{ ctx.fillStyle='#8aa'; ctx.font='8px PixelArcade'; ctx.fillText(s,W/2,494+i*16); });
+  }
+  if(Math.floor(tick/30)%2===0) center('PRESS SPACE',572,'#ffff44',12);
+}
+
+function drawOver(){
+  dim(1);
+  center('YOU GOT',170,'#ff5d5d',22);
+  center('BUREAUCRATIZED',210,'#ff5d5d',26);
+  center('Cause of death: unresolved blockers.',260,'#7e9a90',8);
+  center('Your out-of-office has been set to FOREVER.',282,'#7e9a90',8);
+  center('SCORE '+String(score).padStart(6,'0'),350,'#ffd23f',16);
+  if(score>=best) center('★ NEW BEST! ★',386,'#39ff8c',11);
+  else center('BEST '+String(best).padStart(6,'0'),386,'#3c5a52',10);
+  if(Math.floor(tick/30)%2===0) center('PRESS SPACE',470,'#ffff44',14);
+}
+
+let confetti=null;
+function drawWin(){
+  dim(1);
+  if(!confetti){ confetti=[]; for(let i=0;i<90;i++) confetti.push({x:Math.random()*W,y:Math.random()*H-H,v:1+Math.random()*2.4,c:['#39ff8c','#ffd23f','#ff5d5d','#4da3ff'][i%4]}); }
+  for(const cf of confetti){ cf.y+=cf.v; if(cf.y>H)cf.y=-8; ctx.fillStyle=cf.c; ctx.fillRect(cf.x,cf.y,5,5); }
+  if(headImg.complete && headImg.naturalWidth) ctx.drawImage(headImg,W/2-45,80,90,90);
+  center('PROCESS TERMINATED',215,'#39ff8c',24);
+  center('YOU ESCAPED THE OFFICE!',250,'#c9ffe2',13);
+  const lines=['The Infinite Process is no more.','All meetings are cancelled. Forever.','The elevator plays smooth jazz just for you.','It is Friday, 14:01. Go home, hero.'];
+  lines.forEach((s,i)=>{ ctx.fillStyle='#8aa'; ctx.font='8px PixelArcade'; ctx.textAlign='center'; ctx.fillText(s,W/2,300+i*20); });
+  center('FINAL SCORE '+String(score).padStart(6,'0'),420,'#ffd23f',16);
+  if(score>=best) center('★ NEW BEST! ★',452,'#39ff8c',11);
+  if(Math.floor(tick/30)%2===0) center('PRESS SPACE',510,'#ffff44',14);
+  ctx.fillStyle='#24514a'; ctx.font='7px PixelArcade';
+  ctx.fillText('MADE WITH 💚 AND A LOT OF COFFEE · ŠKOPILOT FAMILY',W/2,566);
+}
+
+function drawPlay(){
+  renderWorld();
+  // částice
+  for(const pa of particles){ ctx.globalAlpha=Math.max(0,pa.life); ctx.fillStyle=pa.col; ctx.fillRect(pa.x|0,pa.y|0,4,4); }
+  ctx.globalAlpha=1;
+  drawWeapon();
+  drawHUD();
+  drawToasts();
+  // damage / pickup flash vinětace
+  if(hurtFlash>0){ ctx.fillStyle='rgba(255,30,30,'+(hurtFlash/60)+')'; ctx.fillRect(0,0,W,VIEW_H); }
+  if(player.fx.vpn>0){ ctx.strokeStyle='rgba(77,163,255,0.5)'; ctx.lineWidth=4; ctx.strokeRect(4,4,W-8,VIEW_H-8); }
+  if(weaponToast>0){ ctx.globalAlpha=Math.min(1,weaponToast/30); ctx.fillStyle='#ffd23f'; ctx.font='10px PixelArcade'; ctx.textAlign='center';
+    ctx.fillText(WEAPONS[player.wi].name,W/2,VIEW_H-48); ctx.globalAlpha=1; }
+  if(player.coffee<10){ if(Math.floor(tick/30)%2===0){ ctx.fillStyle='#ff8c3a'; ctx.font='9px PixelArcade'; ctx.textAlign='center'; ctx.fillText('⚠ LOW COFFEE',W/2,VIEW_H-14); } }
+  if(!locked && Math.floor(tick/40)%2===0){ ctx.fillStyle='#8aa'; ctx.font='8px PixelArcade'; ctx.textAlign='center'; ctx.fillText('CLICK TO CAPTURE MOUSE',W/2,VIEW_H-30); }
+}
+
+/* ===================== LOOP ===================== */
+let acc=0,lastTs=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(!lastTs)lastTs=ts; acc+=Math.min(ts-lastTs,100); lastTs=ts;
+  while(acc>=STEP){ acc-=STEP; update(); }
+  if(state==='title') drawTitle();
+  else if(state==='play') drawPlay();
+  else if(state==='pause') drawPause();
+  else if(state==='inter') drawInter();
+  else if(state==='over') drawOver();
+  else if(state==='win') drawWin();
+  document.body.classList.toggle('allow-cursor', state!=='play');
+}
+loadLevel(0,true);   // attract mode pozadí pro title
+cam.a=0.6;
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

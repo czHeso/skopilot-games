@@ -43,9 +43,11 @@
   .main{flex:1;display:flex;align-items:center;gap:clamp(18px,3vw,56px);
         padding:clamp(6px,1.6vh,20px) clamp(24px,4vw,64px);min-height:0;}
 
-  /* GAMES (left) */
-  #games{flex:1.5;min-width:0;display:flex;flex-direction:column;
-    justify-content:center;gap:clamp(12px,2.6vh,30px);}
+  /* GAMES (left) — 2 sloupce, ať se vejdou 4 kategorie na výšku obrazovky */
+  #games{flex:1.5;min-width:0;display:grid;
+    grid-template-columns:repeat(2,minmax(0,max-content));
+    align-content:center;justify-content:center;
+    column-gap:clamp(16px,2.6vw,44px);row-gap:clamp(12px,2.6vh,30px);}
   .cat-head{display:flex;align-items:center;gap:10px;
     font-size:clamp(9px,1.4vw,15px);color:var(--green);letter-spacing:3px;
     margin-bottom:clamp(8px,1.3vh,13px);text-shadow:0 0 8px rgba(57,255,140,.45);}
@@ -200,6 +202,22 @@
       <g transform="translate(118,40)" fill="none" stroke="#a9c4ba" stroke-width="2" stroke-dasharray="4 3">
         <rect x="-13" y="2" width="26" height="20"/><rect x="-7" y="-10" width="14" height="14"/></g>
       <image href="${HEAD}" x="16" y="82" width="22" height="22"/></svg>`,
+
+    doom:`<svg viewBox="0 0 160 120" preserveAspectRatio="none" shape-rendering="crispEdges">
+      <rect width="160" height="120" fill="#100a07"/>
+      <polygon points="0,0 60,36 100,36 160,0" fill="#181209"/>
+      <polygon points="0,120 60,84 100,84 160,120" fill="#232c36"/>
+      <polygon points="0,0 60,36 60,84 0,120" fill="#4a361f"/>
+      <polygon points="160,0 100,36 100,84 160,120" fill="#3a2a18"/>
+      <rect x="60" y="36" width="40" height="48" fill="#1b130c"/>
+      <g fill="#c22626"><rect x="70" y="46" width="20" height="18"/><rect x="66" y="42" width="6" height="8"/><rect x="88" y="42" width="6" height="8"/>
+        <rect x="72" y="64" width="6" height="10"/><rect x="82" y="64" width="6" height="10"/></g>
+      <g fill="#fff"><rect x="74" y="50" width="4" height="4"/><rect x="82" y="50" width="4" height="4"/></g>
+      <rect x="74" y="58" width="12" height="3" fill="#210a0a"/>
+      <g stroke="#ffcf2e" stroke-width="2"><line x1="80" y1="24" x2="80" y2="32"/><line x1="80" y1="78" x2="80" y2="86"/>
+        <line x1="64" y1="55" x2="58" y2="55"/><line x1="96" y1="55" x2="102" y2="55"/></g>
+      <rect x="66" y="100" width="34" height="20" fill="#3b3f46"/>
+      <rect x="70" y="94" width="16" height="10" fill="#ff8c3a"/></svg>`,
   };
 
   const CATS = [
@@ -209,6 +227,8 @@
       { playable:true, title:'ŠKOPILOT CLIP', genre:'CLEAR CLIP &middot; TIME ATTACK', url:'clip/index.html', hi:'sko_clip_best', time:true, art:ART.cliptris } ] },
     { head:'ŠKOPILOT PRO', items:[
       { playable:true, title:'ŠKOPILOT PRO', genre:'AGENT BUILDER', url:'pro/index.html', hi:'sko_pro_best', art:ART.pro } ] },
+    { head:'ŠKODOOM', items:[
+      { playable:true, title:'ŠKODOOM', genre:'OFFICE FPS &middot; PSEUDO 3D', url:'doom/index.html', hi:'sko_doom_best', art:ART.doom } ] },
   ];
 
   function fmtTime(cs){

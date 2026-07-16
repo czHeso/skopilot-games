@@ -15,6 +15,7 @@ Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený d
 - **ŠkoPilot** — *Flappy ŠkoPilot*
 - **ŠkoPilot Clip** — *ŠkoPilot Clip* (Tetris na čas) — hratelné
 - **ŠkoPilot Pro** — *Agent Builder* (plošinovka) — hratelné
+- **ŠkoDOOM** — *kancelářská FPS* (pseudo-3D raycaster) — hratelné
 
 ---
 
@@ -26,6 +27,7 @@ Launcher (v angličtině, v barvách loga **ŠkoPilot Family**) je rozdělený d
 | `flappy/` | **Flappy ŠkoPilot** | letová obratnost | Mezerník / klik = skok |
 | `clip/` | **ŠkoPilot Clip** | Tetris na čas | šipky = posun, **↑/X** = rotace, Mezerník = hard drop |
 | `pro/` | **ŠkoPilot Pro** | plošinovka, stavba agenta | šipky/joystick + skok, **X** = výstřel |
+| `doom/` | **ŠkoDOOM** | kancelářská FPS (pseudo-3D) | **WASD** = pohyb, **myš** = míření + palba, Mezerník = interakce |
 
 ---
 
@@ -83,10 +85,45 @@ Technické detaily:
 
 ---
 
+### ŠkoDOOM — kancelářská FPS
+
+Parodie na klasický DOOM: ŠkoPilot uvízl v bludišti nekonečných kanceláří,
+meetingových místností a schvalovacích procesů. Místo démonů tu číhají
+**korporátní překážky** — Meeting Monster, Approval Demon, Legacy System Beast,
+Excel Necromancer, VPN Phantom a Mandatory Training Skeleton. Cíl každého
+patra: posbírat **keycardy**, prostřílet se byrokracií a dojet výtahem domů.
+
+Herní mechaniky:
+- **5 pater** — Open Space Nightmare → Endless Meeting Complex → Legacy System
+  Dungeon → Factory Labyrinth → Boardroom of Doom
+- **3 bossové** — Chief Approval Officer, Master of Bureaucracy a finální
+  **The Infinite Process** (proces, který schvaluje vlastní schvalování)
+- **5 zbraní** — PowerPoint Launcher, Excel Cannon, SAP Blaster, Coffee Boost
+  Gun a AI Copilot Ray (lehce si sám míří — přece jen je to AI)
+- **Power-upy** — Extra Coffee (munice!), Fast Approval (rychlopalba),
+  Unlimited VPN (nesmrtelnost), Productivity Boost (2× poškození) a Friday
+  Afternoon Mode (nepřátelé zpomalí, protože je pátek odpoledne)
+- **Korporátní hlášky** — během hraní naskakují náhodné kancelářské perly
+  („This meeting could have been an email.")
+
+Ovládání: **WASD** pohyb, **myš** míření (pointer lock) a palba, **Mezerník**
+otevírá dveře a výtahy, **1–5 / kolečko** přepíná zbraně, **P/Esc** pauza,
+**M** vypne zvuk. Bez myši se lze otáčet **šipkami ←→** a střílet **X/Ctrl**.
+
+> **Zajímavost:** 3D pohled je klasický **raycaster** (stejná technika jako
+> Wolfenstein 3D) — 400 paprsků na snímek, textury i sprity jsou kreslené
+> procedurálně do canvasu a nepřátelé jsou ručně nakódovaný pixel-art ve
+> 2D polích znaků. Hudba a zvuky se syntetizují za běhu **WebAudiem**,
+> takže hra nemá jediný externí asset navíc a funguje offline.
+
+---
+
 ### Společné vlastnosti všech her
 
 - Jdou **přes celou obrazovku** (automaticky se přizpůsobí poměru displeje)
 - **ESC** kdykoliv vrátí do menu, vlevo nahoře je i tlačítko **◀ MENU**
+  (výjimka: v ŠkoDOOM otevře ESC pauzu — do menu se vrátíš přes
+  **QUIT TO ARCADE MENU** nebo tlačítkem **◀ MENU**)
 - Ukládají nejlepší skóre do prohlížeče (`localStorage`)
 - Fungují v **Chromiu bez internetu** — vhodné pro kiosky a výstavní stánky
 
@@ -331,8 +368,10 @@ skopilot-games/
 │   └── index.html      # Celá hra v jednom souboru (~300 řádků JS)
 ├── clip/
 │   └── index.html      # Tetris na čas (~500 řádků JS)
-└── pro/
-    └── index.html      # Plošinovka Agent Builder (~600 řádků JS)
+├── pro/
+│   └── index.html      # Plošinovka Agent Builder (~600 řádků JS)
+└── doom/
+    └── index.html      # Kancelářská FPS ŠkoDOOM — raycaster (~1300 řádků JS)
 ```
 
 Každá hra je **jeden samostatný HTML soubor** — žádné importy, žádné moduly,

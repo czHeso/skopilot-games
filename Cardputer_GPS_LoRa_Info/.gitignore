@@ -1,0 +1,14 @@
+# PlatformIO build output and resolved dependencies
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Arduino IDE build output
+build/
+*.bin
+*.elf
+*.map
+
+# Editors
+.vscode/
+.idea/

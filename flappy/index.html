@@ -63,7 +63,12 @@
       background:#071a13; border:3px solid #155047; border-radius:14px; padding:clamp(14px,3.5vw,32px);
       box-shadow:0 0 0 3px #040b09, 0 0 0 5px #0c3329, 0 0 44px rgba(57,255,140,.35); }
     #winDialog h1{ font-size:clamp(20px,5.5vw,42px); font-weight:normal; color:#39ff8c; letter-spacing:2px;
-      text-shadow:0 0 18px rgba(57,255,140,.55); margin-bottom:clamp(14px,3vw,28px); }
+      text-shadow:0 0 18px rgba(57,255,140,.55); }
+    #winHead{ display:flex; align-items:center; justify-content:center; gap:clamp(12px,2.5vw,24px);
+      margin-bottom:clamp(14px,3vw,28px); }
+    #qrMini{ flex:none; width:clamp(44px,8vw,64px); aspect-ratio:1/1; display:flex; align-items:center; justify-content:center;
+      text-align:center; font-size:clamp(6px,1.1vw,8px); line-height:1.4; color:#c9ffe2; background:#0c2418;
+      border:2px dashed #39ff8c; border-radius:8px; }
     #winCards{ display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(8px,1.8vw,16px); }
     .winCard{ aspect-ratio:3/4; display:flex; align-items:center; justify-content:center; padding:8px;
       font-size:clamp(8px,1.5vw,12px); line-height:1.6; color:#c9ffe2; background:#0c2418;
@@ -87,7 +92,7 @@
   </div>
   <div id="win">
     <div id="winDialog">
-      <h1>Desatero AI</h1>
+      <div id="winHead"><h1>Desatero AI</h1><div id="qrMini">QR KÓD</div></div>
       <div id="winCards">
         <div class="winCard">Placeholder 1</div>
         <div class="winCard">Placeholder 2</div>

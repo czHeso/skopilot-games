@@ -54,25 +54,52 @@
       from{ opacity:0; transform:translate(-50%, 14px); }
       to{ opacity:1; transform:translate(-50%, 0); }
     }
-    /* victory overlay */
+    /* victory overlay: step 1 = results, step 2 = Desatero AI */
     #win{ position:fixed; inset:0; z-index:70; display:none; align-items:center; justify-content:center;
           background:rgba(2,8,6,.78); padding:16px; }
+    body.allow-cursor #win button{ cursor:pointer !important; }
     #win.show{ display:flex; animation:winFade .35s ease-out both; }
     @keyframes winFade{ from{opacity:0;} to{opacity:1;} }
     #winDialog{ width:min(92vw,780px); max-height:94vh; overflow:hidden; text-align:center;
       background:#071a13; border:3px solid #155047; border-radius:14px; padding:clamp(14px,3.5vw,32px);
-      box-shadow:0 0 0 3px #040b09, 0 0 0 5px #0c3329, 0 0 44px rgba(57,255,140,.35); }
-    #winDialog h1{ font-size:clamp(20px,5.5vw,42px); font-weight:normal; color:#39ff8c; letter-spacing:2px;
-      text-shadow:0 0 18px rgba(57,255,140,.55); margin-bottom:clamp(14px,3vw,28px); }
-    #winCards{ display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(8px,1.8vw,16px); }
+      box-shadow:0 0 0 3px #040b09, 0 0 0 5px #0c3329, 0 0 44px rgba(57,255,140,.35);
+      display:grid; }
+    /* both views share one grid cell, so the dialog keeps a stable size while they cross-fade */
+    .winView{ grid-area:1/1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:clamp(12px,2.6vw,22px); opacity:0; visibility:hidden; transform:translateX(28px);
+      transition:opacity .4s ease, transform .4s ease, visibility 0s linear .4s; }
+    #viewAi{ transform:translateX(28px); }
+    #win[data-step="results"] #viewResults,
+    #win[data-step="ai"] #viewAi{ opacity:1; visibility:visible; transform:none; transition-delay:0s; }
+    #win[data-step="ai"] #viewResults{ transform:translateX(-28px); }
+    #winDialog h1{ font-size:clamp(18px,5vw,38px); font-weight:normal; color:#39ff8c; letter-spacing:2px;
+      text-shadow:0 0 18px rgba(57,255,140,.55); }
+    #winStats{ display:flex; gap:clamp(10px,3vw,28px); justify-content:center; flex-wrap:wrap; }
+    .stat{ min-width:clamp(120px,24vw,190px); padding:clamp(10px,2vw,16px); background:#0c2418; border:2px solid #1f9c5e;
+      border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,.5); }
+    .stat small{ display:block; font-size:clamp(7px,1.3vw,9px); color:#1f9c5e; letter-spacing:1px; margin-bottom:10px; }
+    .stat b{ font-weight:normal; font-size:clamp(20px,5vw,34px); color:#c9ffe2; font-variant-numeric:tabular-nums; }
+    #winRecord{ font-size:clamp(10px,2vw,15px); color:#ffcf2e; text-shadow:0 0 14px rgba(255,207,46,.5);
+      animation:recPulse 1s ease-in-out infinite alternate; }
+    #winRecord[hidden]{ display:none; }
+    @keyframes recPulse{ from{opacity:.65;} to{opacity:1;} }
+    .winBtns{ display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+    .winBtn{ font-family:inherit; font-size:clamp(8px,1.6vw,11px); letter-spacing:1px; padding:12px 18px;
+      color:#04100b; background:#39ff8c; border:2px solid #39ff8c; border-radius:10px;
+      box-shadow:0 0 18px rgba(57,255,140,.4); transition:transform .15s, background .15s; }
+    .winBtn:hover{ transform:translateY(-2px); background:#7dffb4; }
+    .winBtn.alt{ color:#c9ffe2; background:transparent; border-color:#1f9c5e; box-shadow:none; }
+    .winBtn.alt:hover{ background:#0d3a33; }
+    #winCards{ display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(8px,1.8vw,16px); width:100%; }
     .winCard{ aspect-ratio:3/4; display:flex; align-items:center; justify-content:center; padding:8px;
       font-size:clamp(8px,1.5vw,12px); line-height:1.6; color:#c9ffe2; background:#0c2418;
       border:2px solid #1f9c5e; border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,.5); }
-    #winHint{ margin-top:clamp(12px,2.5vw,22px); font-size:clamp(7px,1.2vw,9px); color:#1f9c5e; letter-spacing:1px; }
+    .winHint{ font-size:clamp(7px,1.2vw,9px); color:#1f9c5e; letter-spacing:1px; }
     @media (max-width:700px){
       #winCards{ grid-template-columns:repeat(2,1fr); }
       .winCard{ aspect-ratio:4/3; }
     }
+    @media (prefers-reduced-motion:reduce){ .winView, #win.show{ transition:none; animation:none; } #winRecord{ animation:none; } }
   </style>
 </head>
 <body>
@@ -85,16 +112,32 @@
     <canvas id="canvas" width="580" height="380"></canvas>
     <div id="hint">SPACE / CLICK = FLAP &nbsp;&middot;&nbsp; ESC = MENU</div>
   </div>
-  <div id="win">
+  <div id="win" data-step="results">
     <div id="winDialog">
-      <h1>Dobrá práce!</h1>
-      <div id="winCards">
-        <div class="winCard">Placeholder 1</div>
-        <div class="winCard">Placeholder 2</div>
-        <div class="winCard">Placeholder 3</div>
-        <div class="winCard">Placeholder 4</div>
-      </div>
-      <div id="winHint">SPACE / CLICK = HRÁT ZNOVU &nbsp;&middot;&nbsp; ESC = MENU</div>
+      <section class="winView" id="viewResults">
+        <h1>Level dokončen!</h1>
+        <div id="winStats">
+          <div class="stat"><small>SKÓRE</small><b id="winScore">0</b></div>
+          <div class="stat"><small>HIGH SCORE</small><b id="winBest">0</b></div>
+        </div>
+        <div id="winRecord" hidden>Nový rekord!</div>
+        <div class="winBtns">
+          <button class="winBtn" id="btnAi" type="button">Zobrazit Desatero AI</button>
+          <button class="winBtn alt" id="btnAgain" type="button">Hrát znovu</button>
+        </div>
+        <div class="winHint">SPACE = DESATERO AI &nbsp;&middot;&nbsp; X = HRÁT ZNOVU &nbsp;&middot;&nbsp; ESC = MENU</div>
+      </section>
+      <section class="winView" id="viewAi">
+        <h1>Desatero AI</h1>
+        <div id="winCards">
+          <div class="winCard">Bod 1</div>
+          <div class="winCard">Bod 2</div>
+          <div class="winCard">Bod 3</div>
+          <div class="winCard">Bod 4</div>
+        </div>
+        <div class="winBtns"><button class="winBtn alt" id="btnBack" type="button">Zpět</button></div>
+        <div class="winHint">SPACE / BKSP = ZPĚT &nbsp;&middot;&nbsp; ESC = MENU</div>
+      </section>
     </div>
   </div>
   <script>
@@ -173,7 +216,7 @@
     sprite.onerror = () => { sprite.onerror = null; sprite.src = '../assets/skopilotHead.png'; };
     sprite.src = '../assets/8bit/skopilot-head.png';
 
-    let finish = null, finishSpawned = false, wonTs = 0;
+    let finish = null, finishSpawned = false, wonTs = 0, prevBest = 0;
     let ball, pipes, coins, pipeCount, score, best, state, lastPipe, tick = 0;
     // fixed-timestep simulation (frame-rate independent — no slow/fast on FPS dips)
     const STEP = 1000 / 60;
@@ -230,7 +273,7 @@
       pipes = [];
       score = 0; coins = 0; pipeCount = 0;
       state = 'idle'; lastPipe = 0; simTime = 0; acc = 0;
-      gapQueue = []; finish = null; finishSpawned = false;
+      gapQueue = []; finish = null; finishSpawned = false; prevBest = best;
       scoreEl.textContent = 0; coinsEl.textContent = 0;
     }
 
@@ -253,7 +296,6 @@
         else askSaveConfirm();
       }
       else if (state === 'scores') { init(); }
-      else if (state === 'won') { if (performance.now() - wonTs > 800) init(); }
     }
     function afterDeath() {
       const min = scores.length < 5 ? -1 : scores[scores.length - 1].s;
@@ -269,6 +311,16 @@
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { location.href = '../index.html'; return; }
       if (state === 'scores') bumpScores();
+      if (state === 'won') {
+        e.preventDefault();
+        if (winEl.dataset.step === 'results') {
+          if (e.code === 'Space' || e.key === 'Enter') winAct(() => setWinStep('ai'));
+          else if (e.key === 'x' || e.key === 'X') winAct(init);
+        } else if (e.code === 'Space' || e.key === 'Enter' || e.key === 'Backspace' || e.key === 'ArrowLeft') {
+          winAct(() => setWinStep('results'));
+        }
+        return;
+      }
       if (state === 'enter') {
         if (entryConfirm) {
           if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); entryYes = !entryYes; }
@@ -360,7 +412,20 @@
       if (manage) { if (row >= 0) scoreSel = row; }
       else scoreSel = row;
     });
-    document.getElementById('win').addEventListener('click', () => primary());
+    // === level complete: step 1 = results, step 2 = Desatero AI ===
+    const winEl = document.getElementById('win');
+    function setWinStep(step){ winEl.dataset.step = step; }
+    function enterWon(){
+      state = 'won'; wonTs = performance.now();
+      document.getElementById('winScore').textContent = score;
+      document.getElementById('winBest').textContent = best;
+      document.getElementById('winRecord').hidden = !(score > prevBest);
+      setWinStep('results');
+    }
+    function winAct(fn){ if (performance.now() - wonTs > 600) fn(); if (document.activeElement) document.activeElement.blur(); }
+    document.getElementById('btnAi').addEventListener('click', () => winAct(() => setWinStep('ai')));
+    document.getElementById('btnBack').addEventListener('click', () => winAct(() => setWinStep('results')));
+    document.getElementById('btnAgain').addEventListener('click', () => winAct(init));
     canvas.addEventListener('click', e => {
       if (state !== 'scores') { primary(); return; }
       bumpScores();
@@ -683,7 +748,7 @@
         if (BALL_X + HIT_RX > finish.x && BALL_X - HIT_RX < finish.x + FINISH_W && bottom >= top) {
           if (state === 'playing' && bottom - top <= LAND_TOL) {
             ball.y = top - HIT_RY - HIT_OY; ball.vy = 0;   // landed
-            state = 'won'; wonTs = performance.now();
+            enterWon();
           } else state = 'dead';                            // crashed into the side
           return;
         }
@@ -716,7 +781,7 @@
       const help = document.getElementById('controlsHelp');
       if (help && !help.dataset.missing) help.classList.toggle('show', state === 'idle');
       document.getElementById('win').classList.toggle('show', state === 'won');
-      document.body.classList.toggle('allow-cursor', state === 'scores');
+      document.body.classList.toggle('allow-cursor', state === 'scores' || state === 'won');
     }
 
     init();

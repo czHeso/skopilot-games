@@ -39,6 +39,19 @@
       from{ opacity:0; transform:translate(-50%, 14px); }
       to{ opacity:1; transform:translate(-50%, 0); }
     }
+    /* finish screen: AI Desatero (shown after level 3) */
+    #win{ position:fixed; inset:0; z-index:70; display:none; flex-direction:column; align-items:center; justify-content:center;
+          background:rgba(4,11,9,.98); padding:3vh 6vw; overflow:auto; }
+    #win.show{ display:flex; animation:winFade .4s ease-out both; }
+    @keyframes winFade{ from{opacity:0;} to{opacity:1;} }
+    #win h1{ font-weight:normal; font-size:clamp(18px,min(6.5vh,8vw),52px); line-height:1.2; letter-spacing:3px; text-align:center;
+             color:#39ff8c; text-shadow:0 0 18px rgba(57,255,140,.55); margin-bottom:clamp(18px,5vh,48px); }
+    #winList{ list-style:none; display:flex; flex-direction:column; gap:clamp(12px,3.4vh,30px); }
+    #winList li{ display:flex; gap:1.2em; align-items:baseline; font-size:clamp(11px,2.6vh,20px); color:#c9ffe2; letter-spacing:1px; }
+    #winList li b{ font-weight:normal; color:#39ff8c; min-width:1.6em; }
+    #qrBox{ margin-top:clamp(24px,7vh,64px); width:clamp(96px,22vh,190px); aspect-ratio:1/1; display:flex; align-items:center; justify-content:center;
+            font-size:clamp(12px,3vh,22px); letter-spacing:2px; color:#1f9c5e; border:2px dashed #1f9c5e; }
+    @media (prefers-reduced-motion:reduce){ #win.show{ animation:none; } }
   </style>
 </head>
 <body>
@@ -47,6 +60,16 @@
   <img id="controlsHelp" src="../assets/controls-3.png" alt="ovládání"
        onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='../assets/controls.png';}else{this.style.display='none';this.dataset.missing='1';}">
   <div id="stage"><canvas id="c" width="800" height="600"></canvas></div>
+  <div id="win">
+    <h1>Desatero AI</h1>
+    <ol id="winList">
+      <li><b>1.</b>Placeholder</li>
+      <li><b>2.</b>Placeholder</li>
+      <li><b>3.</b>Placeholder</li>
+      <li><b>4.</b>Placeholder</li>
+    </ol>
+    <div id="qrBox">QR</div>
+  </div>
 <script>
 /* ===================== INPUT MANAGER (config) ===================== */
 /* Arcade1Up bývá mapovaný jako USB klávesnice. Uprav podle svého enkodéru. */
@@ -244,7 +267,11 @@ function update(){
   if(state==='title'){ if(consume('up')){ openScores(); return; } if(consume('start')) startGame(); return; }
   if(state==='clear'){ clearTimer--; for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life-=0.02;}
     particles=particles.filter(p=>p.life>0);
-    if(clearTimer<=0){ levelIdx++; if(levelIdx>=LEVELS.length){ victory(); } else { loadLevel(levelIdx); state='play'; } } return; }
+    if(clearTimer<=0){ levelIdx++;
+      if(levelIdx===DESATERO_AFTER){ state='desatero'; desateroTimer=48; justAction.start=false; }   // after level 3: Desatero AI first
+      else if(levelIdx>=LEVELS.length){ victory(); }
+      else { loadLevel(levelIdx); state='play'; } } return; }
+  if(state==='desatero'){ if(desateroTimer>0) desateroTimer--; else if(consume('start')){ if(levelIdx>=LEVELS.length) victory(); else { loadLevel(levelIdx); state='play'; } } return; }
   if(state==='gameover'){ if(consume('start')) maybeEnterScore(); return; }
   if(state==='enter'){ updateEnter(); return; }
   if(state==='scores'){ updateScores(); return; }
@@ -316,6 +343,9 @@ function levelClear(){
 }
 function victory(){ state='gameover'; victoryFlag=true; }
 let victoryFlag=false;
+const DESATERO_AFTER=3;   // Desatero AI is shown after level 3 (levelIdx is already incremented)
+let desateroTimer=0;
+document.getElementById('win').addEventListener('click',()=>{ if(state==='desatero' && desateroTimer<=0) justAction.start=true; });
 
 function gameOver(){
   if(score>best){ best=score; localStorage.setItem('sko_pro_best',best); }
@@ -600,9 +630,10 @@ function drawGameOver(){
   drawBgGrid();
   if(victoryFlag){ center('ALL AGENTS RESTORED!', 220, '#39ff8c', 24); center('SKOPILOT SAVED THE CLOUD', 256,'#7dffb4',12); }
   else center('SERVER CRASH', 220, '#ff5d5d', 30);
-  center('GAME OVER', 262, '#fff', 16);
-  center('SCORE  '+String(score).padStart(6,'0'), 330, '#f5c518', 16);
-  if(Math.floor(tick/30)%2===0) center('PUSH START', 410, '#ffff44', 16);
+  const dy = victoryFlag ? 46 : 0;   // victory has a subtitle, so the rest sits lower to avoid overlap
+  center('GAME OVER', 262+dy, '#fff', 16);
+  center('SCORE  '+String(score).padStart(6,'0'), 330+dy, '#f5c518', 16);
+  if(Math.floor(tick/30)%2===0) center('PUSH START', 410+dy, '#ffff44', 16);
 }
 
 function drawEnter(){
@@ -794,6 +825,7 @@ function loop(ts){
   else if(state==='gameover') drawGameOver();
   else if(state==='enter') drawEnter();
   else if(state==='scores') drawScores();
+  document.getElementById('win').classList.toggle('show', state==='desatero');
   const help = document.getElementById('controlsHelp');
   if (help && !help.dataset.missing) help.classList.toggle('show', state==='title');
   document.body.classList.toggle('allow-cursor', state==='scores');

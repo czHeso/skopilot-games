@@ -76,6 +76,19 @@
       from{ opacity:0; transform:translate(-50%, 14px); }
       to{ opacity:1; transform:translate(-50%, 0); }
     }
+    /* finish screen: AI Desatero (shown after the level is cleared) */
+    #win{ position:fixed; inset:0; z-index:70; display:none; flex-direction:column; align-items:center; justify-content:center;
+          background:rgba(4,11,9,.98); padding:3vh 6vw; overflow:auto; }
+    #win.show{ display:flex; animation:winFade .4s ease-out both; }
+    @keyframes winFade{ from{opacity:0;} to{opacity:1;} }
+    #win h1{ font-weight:normal; font-size:clamp(18px,min(6.5vh,8vw),52px); line-height:1.2; letter-spacing:3px; text-align:center;
+             color:var(--green); text-shadow:0 0 18px rgba(57,255,140,.55); margin-bottom:clamp(18px,5vh,48px); }
+    #winList{ list-style:none; display:flex; flex-direction:column; gap:clamp(12px,3.4vh,30px); }
+    #winList li{ display:flex; gap:1.2em; align-items:baseline; font-size:clamp(11px,2.6vh,20px); color:#c9ffe2; letter-spacing:1px; }
+    #winList li b{ font-weight:normal; color:var(--green); min-width:1.6em; }
+    #qrBox{ margin-top:clamp(24px,7vh,64px); width:clamp(96px,22vh,190px); aspect-ratio:1/1; display:flex; align-items:center; justify-content:center;
+            font-size:clamp(12px,3vh,22px); letter-spacing:2px; color:var(--green2); border:2px dashed var(--green2); }
+    @media (prefers-reduced-motion:reduce){ #win.show{ animation:none; } }
   </style>
 </head>
 <body>
@@ -116,6 +129,17 @@
         ESC MENU
       </div>
     </div>
+  </div>
+
+<div id="win">
+    <h1>Desatero AI</h1>
+    <ol id="winList">
+      <li><b>1.</b>Placeholder</li>
+      <li><b>2.</b>Placeholder</li>
+      <li><b>3.</b>Placeholder</li>
+      <li><b>4.</b>Placeholder</li>
+    </ol>
+    <div id="qrBox">QR</div>
   </div>
 
 <script>
@@ -183,7 +207,7 @@
 
   // ====== state ======
   let grid, current, nextPiece, clipRemaining;
-  let state = 'idle';            // idle | playing | dead | enter | scores
+  let state = 'idle';            // idle | playing | dead | desatero | enter | scores
   let startTime = 0, finalCs = 0, liveCs = 0;
   let dropAcc = 0, lastT = 0, bombTimer = 0;
   const DROP_INTERVAL = 760;     // ms
@@ -460,12 +484,17 @@
     finalCs = liveCs;
     if (!best || finalCs < best){ best = finalCs; localStorage.setItem('sko_clip_best', best); }
     const worst = scores.length < 5 ? Infinity : scores[scores.length - 1].t;
-    if (finalCs < worst){
-      resetEntry(); state = 'enter';
-    } else {
-      openScores();
-    }
+    // level cleared: show the Desatero AI screen first, then continue with the usual flow
+    desateroNext = finalCs < worst ? 'enter' : 'scores';
+    desateroTs = performance.now();
+    state = 'desatero';
     refreshSidebar();
+  }
+  let desateroNext = 'scores', desateroTs = 0;
+  function leaveDesatero(){
+    if (performance.now() - desateroTs < 800) return;
+    if (desateroNext === 'enter'){ resetEntry(); state = 'enter'; }
+    else openScores();
   }
 
   function confirmName(){
@@ -487,6 +516,7 @@
   function primary(){
     if (state === 'idle')   { startGame(); }
     else if (state === 'dead')   { resetBoard(); state = 'idle'; }
+    else if (state === 'desatero') { leaveDesatero(); }
     else if (state === 'scores') { resetBoard(); state = 'idle'; }
     else if (state === 'enter')  {
       if (entryConfirm){ if (entryYes) confirmName(); else entryConfirm = false; }
@@ -498,6 +528,7 @@
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape'){ location.href = '../index.html'; return; }
     if (state === 'scores') bumpScores();
+    if (state === 'desatero'){ e.preventDefault(); if (e.code === 'Space' || e.key === 'Enter') leaveDesatero(); return; }
 
     if (state === 'playing'){
       switch (e.key){
@@ -605,6 +636,7 @@
     if (manage){ if (row >= 0) scoreSel = row; }
     else scoreSel = row;
   });
+  document.getElementById('win').addEventListener('click', () => { if (state === 'desatero') leaveDesatero(); });
   board.addEventListener('click', e => {
     if (state === 'playing' || state === 'enter') return;
     if (state !== 'scores'){ primary(); return; }
@@ -729,6 +761,7 @@
     else if (state === 'dead')   drawGameOver();
     else if (state === 'enter')  drawEnter();
     else if (state === 'scores') drawScores();
+    document.getElementById('win').classList.toggle('show', state === 'desatero');
     const help = document.getElementById('controlsHelp');
     if (help && !help.dataset.missing) help.classList.toggle('show', state === 'idle');
     document.body.classList.toggle('allow-cursor', state === 'scores');
@@ -933,7 +966,7 @@
     }
     lastT = now;
 
-    if (state === 'scores' || state === 'enter') timeEl.textContent = fmt(finalCs);
+    if (state === 'scores' || state === 'enter' || state === 'desatero') timeEl.textContent = fmt(finalCs);
 
     if (state === 'scores' && now - scoresActivityTs > SCORES_TIMEOUT){ resetBoard(); state = 'idle'; }
 

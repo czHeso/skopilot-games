@@ -75,7 +75,7 @@
   <img id="controlsHelp" src="../assets/controls-1.png" alt="ovládání"
        onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='../assets/controls.png';}else{this.style.display='none';this.dataset.missing='1';}">
   <div id="stage">
-    <div id="hud">SCORE <span id="score">0</span> &nbsp; BEST <span id="best">0</span> &nbsp; <span style="color:#ffcf2e">$</span> <span id="coins">0</span></div>
+    <div id="hud">SCORE <span id="score">0</span> <span id="bestWrap" hidden>&nbsp; BEST <span id="best">0</span></span> &nbsp; <span style="color:#ffcf2e">$</span> <span id="coins">0</span></div>
     <canvas id="canvas" width="580" height="380"></canvas>
     <div id="hint">SPACE / CLICK = FLAP &nbsp;&middot;&nbsp; ESC = MENU</div>
   </div>
@@ -679,6 +679,8 @@
           } else state = 'dead';                            // crashed into the side
           return;
         }
+        // invisible barrier right behind the platform: flying past it without landing = game over
+        if (finish.x + FINISH_W < BALL_X - HIT_RX) { state = 'dead'; return; }
         if (finish.x + FINISH_W < -10) finish = null;
       }
       if (ball.y + HIT_RY + HIT_OY > H - GROUND || ball.y - HIT_RY + HIT_OY < 0) state = 'dead';

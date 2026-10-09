@@ -43,9 +43,9 @@
   .main{flex:1;display:flex;align-items:center;gap:clamp(18px,3vw,56px);
         padding:clamp(6px,1.6vh,20px) clamp(24px,4vw,64px);min-height:0;}
 
-  /* GAMES (left) — 2 sloupce, ať se vejdou 4 kategorie na výšku obrazovky */
+  /* GAMES (left) — jeden sloupec, kategorie pod sebou */
   #games{flex:1.5;min-width:0;display:grid;
-    grid-template-columns:repeat(2,minmax(0,max-content));
+    grid-template-columns:minmax(0,max-content);
     align-content:center;justify-content:center;
     column-gap:clamp(16px,2.6vw,44px);row-gap:clamp(12px,2.6vh,30px);}
   .cat-head{display:flex;align-items:center;gap:10px;
@@ -58,9 +58,10 @@
     background:repeating-linear-gradient(90deg,var(--line) 0,var(--line) 6px,transparent 6px,transparent 12px);}
   .row{display:flex;flex-wrap:wrap;gap:clamp(12px,1.6vw,26px);}
 
-  .card{width:clamp(140px,17vw,224px);display:flex;flex-direction:column;
+  .card{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:clamp(12px,1.6vw,24px);
+    grid-template-rows:1fr auto auto 1fr;align-items:start;
     cursor:pointer;transition:transform .12s;}
-  .frame{width:100%;aspect-ratio:4/3;position:relative;overflow:hidden;
+  .frame{grid-row:1/span 4;width:clamp(120px,min(17vw,21vh),224px);aspect-ratio:4/3;position:relative;overflow:hidden;
     border:3px solid var(--line);
     background:linear-gradient(180deg,#0c2a24 0%,#061d19 55%,#03110e 100%);
     box-shadow:0 0 0 3px var(--bg), 0 0 0 5px var(--line2), 0 10px 0 rgba(0,0,0,.45);}
@@ -69,11 +70,11 @@
     background:
       radial-gradient(130% 70% at 50% -12%, rgba(57,255,140,.12), transparent 58%),
       repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.18) 3px,rgba(0,0,0,0) 4px);}
-  .cap{margin-top:12px;font-size:clamp(8px,1vw,12px);color:var(--sage2);letter-spacing:1px;line-height:1.5;}
-  .genre{margin-top:6px;font-size:clamp(6px,.82vw,9px);color:var(--green2);letter-spacing:1px;}
-  .hi{margin-top:5px;font-size:clamp(6px,.82vw,9px);color:#3c5a52;letter-spacing:1px;}
+  .cap{grid-column:2;grid-row:2;align-self:end;margin-top:0;font-size:clamp(8px,1vw,12px);color:var(--sage2);letter-spacing:1px;line-height:1.5;}
+  .genre{grid-column:2;grid-row:3;margin-top:6px;font-size:clamp(6px,.82vw,9px);color:var(--green2);letter-spacing:1px;}
+  .hi{grid-column:2;grid-row:4;margin-top:5px;font-size:clamp(6px,.82vw,9px);color:#3c5a52;letter-spacing:1px;}
 
-  .card.sel{transform:translateY(-7px) scale(1.05);}
+  .card.sel{transform:scale(1.04);transform-origin:left center;}
   .card.sel .frame{border-color:var(--green);
     box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--green2),0 0 26px rgba(57,255,140,.6),0 10px 0 rgba(0,0,0,.45);}
   .card.sel .cap{color:var(--green);text-shadow:0 0 8px rgba(57,255,140,.5);}

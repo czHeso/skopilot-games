@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>ŠkoDOOM — Office FPS</title>
   <style>
-    @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
+    @font-face{ font-family:'PixelArcade'; src:url('../../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
     *{margin:0;padding:0;box-sizing:border-box;}
     *{cursor:none !important;}   /* kiosk: hide mouse cursor (Wayland-safe) */
     /* menus: allow the mouse so buttons can be clicked */
@@ -16,7 +16,7 @@
       image-rendering:pixelated;}
     #bg{position:fixed;inset:0;z-index:0;pointer-events:none;
       background:radial-gradient(ellipse at 50% 40%, rgba(30,8,8,.5), rgba(4,11,9,.95) 80%),
-                 url('../assets/8bit/circuit.jpg') center/cover no-repeat; opacity:.35;}
+                 url('../../assets/8bit/circuit.jpg') center/cover no-repeat; opacity:.35;}
     body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
       background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);}
     #stage{transform-origin:center center;position:relative;z-index:3;}
@@ -26,33 +26,12 @@
       border:2px solid #1f9c5e;padding:9px 14px;font-size:10px;letter-spacing:1px;
       cursor:pointer;font-family:inherit;box-shadow:0 0 0 2px #040b09, 0 0 14px rgba(57,255,140,.25);}
     #menuBtn:hover{background:#11331f;color:#39ff8c;}
-    /* finish screen: AI Desatero (shown after the first map) */
-    #win{position:fixed;inset:0;z-index:70;display:none;flex-direction:column;align-items:center;justify-content:center;
-      background:rgba(4,11,9,.98);padding:3vh 6vw;overflow:auto;}
-    #win.show{display:flex;animation:winFade .4s ease-out both;}
-    @keyframes winFade{from{opacity:0;}to{opacity:1;}}
-    #win h1{font-weight:normal;font-size:clamp(18px,min(6.5vh,8vw),52px);line-height:1.2;letter-spacing:3px;text-align:center;
-      color:#39ff8c;text-shadow:0 0 18px rgba(57,255,140,.55);margin-bottom:clamp(18px,5vh,48px);}
-    #winList{list-style:none;display:flex;flex-direction:column;gap:clamp(12px,3.4vh,30px);;max-width:min(92vw,820px);}
-    #winList li{display:flex;gap:1.2em;align-items:flex-start;font-size:clamp(9px,min(2.4vh,3.2vw),18px);line-height:1.6;color:#c9ffe2;letter-spacing:1px;}
-    #winList li b{font-weight:normal;color:#39ff8c;min-width:1.6em;}
-    #qrBox{margin-top:clamp(20px,5vh,48px);width:clamp(120px,34vh,300px);aspect-ratio:1/1;}
-    #qrBox img{width:100%;height:100%;display:block;image-rendering:pixelated;border-radius:6px;}
-    @media (prefers-reduced-motion:reduce){#win.show{animation:none;}}
   </style>
 </head>
 <body>
   <div id="bg"></div>
-  <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
+  <button id="menuBtn" onclick="location.href='../../index.html'">&#9664; MENU</button>
   <div id="stage"><canvas id="c" width="800" height="600"></canvas></div>
-  <div id="win">
-    <h1>Desatero AI</h1>
-    <ol id="winList">
-      <li><b>9.</b><span>Měřte přínosy.</span></li>
-      <li><b>10.</b><span>AI je hlavně o lidech.</span></li>
-    </ol>
-    <div id="qrBox"><img src="../assets/qr-desatero.png" alt="QR kód"></div>
-  </div>
 <script>
 /* ============================================================
    ŠkoDOOM — Office FPS
@@ -72,7 +51,7 @@ const STEP=1000/60;
 function fit(){ const s=Math.min(innerWidth/stage.offsetWidth, innerHeight/stage.offsetHeight); stage.style.transform='scale('+s+')'; }
 addEventListener('resize',fit); addEventListener('load',fit); fit();
 
-const headImg=new Image(); headImg.src='../assets/skopilotHead.png';
+const headImg=new Image(); headImg.src='../../assets/skopilotHead.png';
 headImg.onload=()=>{ if(TH) buildTextures(); };   // plakáty s maskotem po načtení
 
 /* ===================== INPUT MANAGER (config) ===================== */
@@ -874,18 +853,9 @@ function levelClear(){
   interData={secs,timeBonus,killBonus,bonus,kills,totalEnemies,itemsGot,itemsTotal};
   SFX.fanfare();
   if(document.pointerLockElement) document.exitPointerLock();
-  if(levelIdx===DESATERO_AFTER){ state='desatero'; desateroTimer=48; justAction.use=false; justAction.fire=false; justAction.pause=false; }   // after the first map: Desatero AI, then back to the title menu
-  else if(levelIdx>=LEVELS.length-1){ winFlag=true; endGame(); }
+  if(levelIdx>=LEVELS.length-1){ winFlag=true; endGame(); }
   else state='inter';
 }
-const DESATERO_AFTER=0;   // levelIdx after which the Desatero AI screen replaces the rest of the game
-let desateroTimer=0;
-function leaveDesatero(){
-  if(desateroTimer>0) return;
-  if(score>best){ best=score; localStorage.setItem('sko_doom_best',best); }   // same best-score saving as endGame()
-  backToTitle();
-}
-document.getElementById('win').addEventListener('click',leaveDesatero);
 function nextLevel(){ loadLevel(levelIdx+1,false); state='play'; grabPointer(); }
 function endGame(){
   if(score>best){ best=score; localStorage.setItem('sko_doom_best',best); }
@@ -988,7 +958,6 @@ function update(){
   tick++;
   if(state==='title'){ cam.a+=0.003; return; }
   if(state==='pause'){ updatePause(); return; }
-  if(state==='desatero'){ if(desateroTimer>0) desateroTimer--; else if(consume('use')||consume('fire')||consume('pause')) leaveDesatero(); return; }
   if(state==='inter'){ if(consume('use')||consume('fire')) nextLevel(); return; }
   if(state==='over'||state==='win'){ if(consume('use')||consume('fire')||consume('pause')) backToTitle(); return; }
 
@@ -1172,7 +1141,7 @@ function pauseAction(i){
   if(i===0) resumeGame();
   else if(i===1) restartLevel();
   else if(i===2){ muted=!muted; }
-  else if(i===3){ stopMusic(); location.href='../index.html'; }
+  else if(i===3){ stopMusic(); location.href='../../index.html'; }
 }
 canvas.addEventListener('mousemove',e=>{
   if(state!=='pause') return;
@@ -1628,7 +1597,6 @@ function loop(ts){
   else if(state==='inter') drawInter();
   else if(state==='over') drawOver();
   else if(state==='win') drawWin();
-  document.getElementById('win').classList.toggle('show', state==='desatero');
   document.body.classList.toggle('allow-cursor', state!=='play');
 }
 loadLevel(0,true);   // attract mode pozadí pro title

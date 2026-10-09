@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>ŠkoPilot Pro — Agent Builder</title>
   <style>
-    @font-face{ font-family:'PixelArcade'; src:url('../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
+    @font-face{ font-family:'PixelArcade'; src:url('../../assets/fonts/PressStart2P.ttf') format('truetype'); font-display:swap; }
     *{margin:0;padding:0;box-sizing:border-box;}
     *{cursor:none !important;}   /* kiosk: hide mouse cursor (Wayland-safe) */
     /* hall of fame: allow the mouse so records can be deleted by clicking */
@@ -16,7 +16,7 @@
       image-rendering:pixelated;}
     #bg{position:fixed;inset:0;z-index:0;pointer-events:none;
       background:radial-gradient(ellipse at 50% 40%, rgba(8,30,24,.4), rgba(4,11,9,.94) 80%),
-                 url('../assets/8bit/circuit.jpg') center/cover no-repeat; opacity:.4;}
+                 url('../../assets/8bit/circuit.jpg') center/cover no-repeat; opacity:.4;}
     body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
       background:repeating-linear-gradient(rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);}
     #stage{transform-origin:center center;position:relative;z-index:3;}
@@ -39,35 +39,14 @@
       from{ opacity:0; transform:translate(-50%, 14px); }
       to{ opacity:1; transform:translate(-50%, 0); }
     }
-    /* finish screen: AI Desatero (shown after level 3) */
-    #win{ position:fixed; inset:0; z-index:70; display:none; flex-direction:column; align-items:center; justify-content:center;
-          background:rgba(4,11,9,.98); padding:3vh 6vw; overflow:auto; }
-    #win.show{ display:flex; animation:winFade .4s ease-out both; }
-    @keyframes winFade{ from{opacity:0;} to{opacity:1;} }
-    #win h1{ font-weight:normal; font-size:clamp(18px,min(6.5vh,8vw),52px); line-height:1.2; letter-spacing:3px; text-align:center;
-             color:#39ff8c; text-shadow:0 0 18px rgba(57,255,140,.55); margin-bottom:clamp(18px,5vh,48px); }
-    #winList{ list-style:none; display:flex; flex-direction:column; gap:clamp(12px,3.4vh,30px); ;max-width:min(92vw,820px);}
-    #winList li{display:flex;gap:1.2em;align-items:flex-start;font-size:clamp(9px,min(2.4vh,3.2vw),18px);line-height:1.6;color:#c9ffe2;letter-spacing:1px;}
-    #winList li b{ font-weight:normal; color:#39ff8c; min-width:1.6em; }
-    #qrBox{margin-top:clamp(20px,5vh,48px);width:clamp(120px,34vh,300px);aspect-ratio:1/1;}
-    #qrBox img{width:100%;height:100%;display:block;image-rendering:pixelated;border-radius:6px;}
-    @media (prefers-reduced-motion:reduce){ #win.show{ animation:none; } }
   </style>
 </head>
 <body>
   <div id="bg"></div>
-  <button id="menuBtn" onclick="location.href='../index.html'">&#9664; MENU</button>
-  <img id="controlsHelp" src="../assets/controls-3.png" alt="ovládání"
-       onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='../assets/controls.png';}else{this.style.display='none';this.dataset.missing='1';}">
+  <button id="menuBtn" onclick="location.href='../../index.html'">&#9664; MENU</button>
+  <img id="controlsHelp" src="../../assets/controls-3.png" alt="ovládání"
+       onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='../../assets/controls.png';}else{this.style.display='none';this.dataset.missing='1';}">
   <div id="stage"><canvas id="c" width="800" height="600"></canvas></div>
-  <div id="win">
-    <h1>Desatero AI</h1>
-    <ol id="winList">
-      <li><b>7.</b><span>Myslete na bezpečnost.</span></li>
-      <li><b>8.</b><span>Sdílejte úspěchy i neúspěchy.</span></li>
-    </ol>
-    <div id="qrBox"><img src="../assets/qr-desatero.png" alt="QR kód"></div>
-  </div>
 <script>
 /* ===================== INPUT MANAGER (config) ===================== */
 /* Arcade1Up bývá mapovaný jako USB klávesnice. Uprav podle svého enkodéru. */
@@ -86,7 +65,7 @@ function setActions(key,val,track){
   for(const a in KEYMAP){ if(KEYMAP[a].includes(key)){ if(val && !action[a] && track) justAction[a]=true; action[a]=val; } }
 }
 addEventListener('keydown',e=>{
-  if(KEYMAP.menu.includes(e.key)){ location.href='../index.html'; return; }
+  if(KEYMAP.menu.includes(e.key)){ location.href='../../index.html'; return; }
   if(state==='scores') bumpScores();
   if(state==='enter'){
     if(entryConfirm){
@@ -138,10 +117,10 @@ const W=canvas.width, H=canvas.height;
 function fit(){ const s=Math.min(innerWidth/stage.offsetWidth, innerHeight/stage.offsetHeight); stage.style.transform='scale('+s+')'; }
 addEventListener('resize',fit); addEventListener('load',fit); fit();
 
-const headImg=new Image(); headImg.src='../assets/skopilotHead.png';
-const playerImg=new Image(); playerImg.src='../assets/skopilot_run.png';
+const headImg=new Image(); headImg.src='../../assets/skopilotHead.png';
+const playerImg=new Image(); playerImg.src='../../assets/skopilot_run.png';
 const enemyImgs={};
-['bug','machine','email','paper'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/enemies/'+k+'.png'; enemyImgs[k]=im; });
+['bug','machine','email','paper'].forEach(k=>{ const im=new Image(); im.src='../../assets/8bit/enemies/'+k+'.png'; enemyImgs[k]=im; });
 function enemySprite(kind){
   if(kind==='email') return enemyImgs.email;
   if(kind==='paper') return enemyImgs.paper;
@@ -149,10 +128,10 @@ function enemySprite(kind){
   return enemyImgs.bug;   // syntax / legacy / default
 }
 const itemImgs={};
-['floppy','coffee','shield'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/items/'+k+'.png'; itemImgs[k]=im; });
+['floppy','coffee','shield'].forEach(k=>{ const im=new Image(); im.src='../../assets/8bit/items/'+k+'.png'; itemImgs[k]=im; });
 const bgImgs={};
-['it','factory','hr'].forEach(k=>{ const im=new Image(); im.src='../assets/8bit/bg/'+k+'.png'; bgImgs[k]=im; });
-const carImgs=['car_green','car_silver','car_white'].map(k=>{ const im=new Image(); im.src='../assets/8bit/items/'+k+'.png'; return im; });
+['it','factory','hr'].forEach(k=>{ const im=new Image(); im.src='../../assets/8bit/bg/'+k+'.png'; bgImgs[k]=im; });
+const carImgs=['car_green','car_silver','car_white'].map(k=>{ const im=new Image(); im.src='../../assets/8bit/items/'+k+'.png'; return im; });
 
 /* ===================== CONSTANTS ===================== */
 /* mírnější fyzika: vyšší a delší skok, ať jsou všechny skoky pohodlné */
@@ -265,11 +244,7 @@ function update(){
   if(state==='title'){ if(consume('up')){ openScores(); return; } if(consume('start')) startGame(); return; }
   if(state==='clear'){ clearTimer--; for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life-=0.02;}
     particles=particles.filter(p=>p.life>0);
-    if(clearTimer<=0){ levelIdx++;
-      if(levelIdx===DESATERO_AFTER){ state='desatero'; desateroTimer=48; justAction.start=false; }   // after level 3: Desatero AI first
-      else if(levelIdx>=LEVELS.length){ victory(); }
-      else { loadLevel(levelIdx); state='play'; } } return; }
-  if(state==='desatero'){ if(desateroTimer>0) desateroTimer--; else if(consume('start')){ if(levelIdx>=LEVELS.length) victory(); else { loadLevel(levelIdx); state='play'; } } return; }
+    if(clearTimer<=0){ levelIdx++; if(levelIdx>=LEVELS.length){ victory(); } else { loadLevel(levelIdx); state='play'; } } return; }
   if(state==='gameover'){ if(consume('start')) maybeEnterScore(); return; }
   if(state==='enter'){ updateEnter(); return; }
   if(state==='scores'){ updateScores(); return; }
@@ -341,9 +316,6 @@ function levelClear(){
 }
 function victory(){ state='gameover'; victoryFlag=true; }
 let victoryFlag=false;
-const DESATERO_AFTER=3;   // Desatero AI is shown after level 3 (levelIdx is already incremented)
-let desateroTimer=0;
-document.getElementById('win').addEventListener('click',()=>{ if(state==='desatero' && desateroTimer<=0) justAction.start=true; });
 
 function gameOver(){
   if(score>best){ best=score; localStorage.setItem('sko_pro_best',best); }
@@ -628,10 +600,9 @@ function drawGameOver(){
   drawBgGrid();
   if(victoryFlag){ center('ALL AGENTS RESTORED!', 220, '#39ff8c', 24); center('SKOPILOT SAVED THE CLOUD', 256,'#7dffb4',12); }
   else center('SERVER CRASH', 220, '#ff5d5d', 30);
-  const dy = victoryFlag ? 46 : 0;   // victory has a subtitle, so the rest sits lower to avoid overlap
-  center('GAME OVER', 262+dy, '#fff', 16);
-  center('SCORE  '+String(score).padStart(6,'0'), 330+dy, '#f5c518', 16);
-  if(Math.floor(tick/30)%2===0) center('PUSH START', 410+dy, '#ffff44', 16);
+  center('GAME OVER', 262, '#fff', 16);
+  center('SCORE  '+String(score).padStart(6,'0'), 330, '#f5c518', 16);
+  if(Math.floor(tick/30)%2===0) center('PUSH START', 410, '#ffff44', 16);
 }
 
 function drawEnter(){
@@ -823,7 +794,6 @@ function loop(ts){
   else if(state==='gameover') drawGameOver();
   else if(state==='enter') drawEnter();
   else if(state==='scores') drawScores();
-  document.getElementById('win').classList.toggle('show', state==='desatero');
   const help = document.getElementById('controlsHelp');
   if (help && !help.dataset.missing) help.classList.toggle('show', state==='title');
   document.body.classList.toggle('allow-cursor', state==='scores');
